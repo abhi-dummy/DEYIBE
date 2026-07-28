@@ -1497,10 +1497,6 @@ export default function App() {
           <div style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontSize: '1.5rem', fontWeight: 700, color: '#191715', cursor: 'pointer' }} onClick={() => setViewLanding(true)}>
             deyibe
           </div>
-          <div style={{ display: 'flex', gap: '14px', fontSize: '0.72rem', color: '#8c857e', fontWeight: 600 }}>
-            <span>Brands</span>
-            <span>Editorials</span>
-          </div>
           <button 
             className="btn-primary" 
             style={{ padding: '6px 14px', fontSize: '0.75rem', borderRadius: '20px' }}
@@ -1519,18 +1515,18 @@ export default function App() {
           <div style={{ textAlign: 'center', padding: '10px 0 20px 0' }}>
             <h1 style={{ 
               fontFamily: 'var(--font-serif)', 
-              fontSize: '2.5rem', 
+              fontSize: '2.1rem', 
               fontWeight: 500, 
-              lineHeight: 1.1, 
+              lineHeight: 1.2, 
               color: '#191715', 
               letterSpacing: '-0.03em' 
             }}>
-              Save your <span style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>favorite</span> finds.
+              You have spent enough, time to say
             </h1>
             
             <h2 style={{ 
               fontFamily: 'var(--font-serif)', 
-              fontSize: '2.4rem', 
+              fontSize: '2.5rem', 
               fontWeight: 500, 
               lineHeight: 1.1, 
               color: '#191715', 
@@ -1556,52 +1552,84 @@ export default function App() {
             </button>
           </div>
 
-          {/* Phia-style Tilted Polaroid Collage Card Grid */}
+          {/* Phia-style Tilted Polaroid Collage Card Grid with Uniform SVGs */}
           <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', padding: '20px 10px', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             
-            {/* Card 1 */}
+            {/* Card 1: Costco list */}
             <div className="phia-polaroid-card" style={{ transform: 'rotate(-3deg)', minWidth: '155px', flexShrink: 0 }}>
               <div className="phia-collage-grid">
-                <div className="phia-collage-image">🛒</div>
-                <div className="phia-collage-image">🥚</div>
-                <div className="phia-collage-image">🥛</div>
-                <div className="phia-collage-image">🍎</div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                </div>
               </div>
               <div className="phia-polaroid-title">Costco list 🍂</div>
               <div className="phia-polaroid-count">44 items</div>
             </div>
 
-            {/* Card 2 */}
+            {/* Card 2: Weekly chores */}
             <div className="phia-polaroid-card" style={{ transform: 'rotate(1.5deg)', minWidth: '155px', flexShrink: 0 }}>
               <div className="phia-collage-grid">
-                <div className="phia-collage-image">🧹</div>
-                <div className="phia-collage-image">🗑️</div>
-                <div className="phia-collage-image">🧼</div>
-                <div className="phia-collage-image">🍽️</div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><path d="M18 3L6 15M4 21l3-3M10 8l3-3M8 10l3-3"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><path d="M9 22h6V10H9v12zM12 2v8M10 5h4"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/></svg>
+                </div>
               </div>
               <div className="phia-polaroid-title">Weekly chores ❄️</div>
               <div className="phia-polaroid-count">12 items</div>
             </div>
 
-            {/* Card 3 */}
+            {/* Card 3: Roomie expenses */}
             <div className="phia-polaroid-card" style={{ transform: 'rotate(-2deg)', minWidth: '155px', flexShrink: 0 }}>
               <div className="phia-collage-grid">
-                <div className="phia-collage-image">💸</div>
-                <div className="phia-collage-image">🌐</div>
-                <div className="phia-collage-image">⚡</div>
-                <div className="phia-collage-image">🍕</div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z"/></svg>
+                </div>
               </div>
               <div className="phia-polaroid-title">Roomie expenses 🎄</div>
               <div className="phia-polaroid-count">4 items</div>
             </div>
 
-            {/* Card 4 */}
+            {/* Card 4: Kompa wishlist */}
             <div className="phia-polaroid-card" style={{ transform: 'rotate(2.5deg)', minWidth: '155px', flexShrink: 0 }}>
               <div className="phia-collage-grid">
-                <div className="phia-collage-image">🔌</div>
-                <div className="phia-collage-image">☕</div>
-                <div className="phia-collage-image">🔋</div>
-                <div className="phia-collage-image">📻</div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A5 5 0 0 0 8 8c0 1 .3 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/></svg>
+                </div>
+                <div className="phia-collage-image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e5954" strokeWidth="2"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+                </div>
               </div>
               <div className="phia-polaroid-title">Kompa wishlist ✨</div>
               <div className="phia-polaroid-count">16 items</div>
@@ -1629,7 +1657,7 @@ export default function App() {
               Settle bills with <span style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: '#f3f2ee' }}>optimized</span> splits
             </h2>
             <p style={{ fontSize: '0.78rem', color: '#eae9e5', marginTop: '8px', lineHeight: 1.4, padding: '0 10px' }}>
-              Deyibe calculates net balance splits across roommates, minimizing equations for zero math headaches.
+              Deyibe calculates net balance splits across roommates. Unlike Splitwise, add unlimited splits and group transactions completely free.
             </p>
             
             {/* Split optimization card mockup */}
