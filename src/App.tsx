@@ -42,6 +42,16 @@ interface FlowLog {
 export default function App() {
   // App States
   const [activeTab, setActiveTab] = useState<'home' | 'shelf' | 'run' | 'split' | 'chat'>('home');
+  const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
+  const activeTabRef = useRef(activeTab);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+    if (activeTab === 'chat') {
+      setUnreadChatCount(0);
+    }
+  }, [activeTab]);
+
   const [homemates] = useState<Homemate[]>(initialHomemates);
   const [currentUser] = useState<Homemate>(initialHomemates[0]); // Abhi (You)
   
@@ -167,7 +177,7 @@ export default function App() {
     // Subscribe to chat
     const chatChannel = supabase
       .channel('chat_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, async () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, async (payload) => {
         const { data } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true });
         if (data) {
           setChatMessages(data.map(m => ({
@@ -176,6 +186,14 @@ export default function App() {
             text: m.text,
             timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           })));
+
+          // Check if payload is an insert from someone else while we're not on the chat tab
+          if (payload && payload.eventType === 'INSERT') {
+            const newMsg = payload.new;
+            if (newMsg && newMsg.sender_id !== currentUser.id && activeTabRef.current !== 'chat') {
+              setUnreadChatCount(prev => prev + 1);
+            }
+          }
         }
       })
       .subscribe();
@@ -440,25 +458,6 @@ export default function App() {
         text: chatInput
       }));
     }
-
-    // Simulate reply
-    setTimeout(async () => {
-      if (dbSynced) {
-        safeDbWrite(() => supabase.from('chat_messages').insert({
-          sender_id: '2', // Sandeep
-          text: 'Agreed. Let me check and settle my balance.'
-        }));
-      }
-
-      const responseMessage: ChatMessage = {
-        id: `m_${Date.now() + 1}`,
-        senderId: '2', // Sandeep
-        text: 'Agreed. Let me check and settle my balance.',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setChatMessages(prev => [...prev, responseMessage]);
-      addPulse('New Message', 'Sandeep replied in chat', 'info');
-    }, 1500);
   };
 
   // Settle up payment handler
@@ -1988,9 +1987,18 @@ export default function App() {
             <DollarSign />
             <span>Split</span>
           </div>
-          <div className={`nav-item ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>
+          <div 
+            className={`nav-item ${activeTab === 'chat' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('chat')}
+            style={{ position: 'relative' }}
+          >
             <MessageSquare />
             <span>Chat</span>
+            {unreadChatCount > 0 && (
+              <span className="unread-badge">
+                {unreadChatCount}
+              </span>
+            )}
           </div>
         </nav>
 
