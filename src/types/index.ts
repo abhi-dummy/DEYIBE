@@ -21,6 +21,7 @@ export interface Expense {
   shares: Record<string, number>; // user id -> amount owed
   date: string;
   visibility: string[]; // user ids who can see this
+  itemsJson?: Array<{ name: string; cost: number; splitWith: string[] }>;
 }
 
 export interface ShelfItem {
@@ -88,4 +89,5 @@ export interface InventoryItem {
   price?: number;
   addedBy?: string;
   createdAt?: string;
+  status?: 'want' | 'waiting' | 'bought';
 }

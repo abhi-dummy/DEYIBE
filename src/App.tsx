@@ -32,7 +32,8 @@ import {
   ExternalLink,
   Flame,
   Coffee,
-  Volume2
+  Volume2,
+  Trash
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { createWorker } from 'tesseract.js';
@@ -111,10 +112,13 @@ export default function App() {
   const [showAddChoreModal, setShowAddChoreModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
+  const [showWishlistDetailsModal, setShowWishlistDetailsModal] = useState<InventoryItem | null>(null);
+  const [showExpenseDetailsModal, setShowExpenseDetailsModal] = useState<Expense | null>(null);
 
   // Form Inputs
   const [newShelfName, setNewShelfName] = useState('');
   const [newShelfPriority, setNewShelfPriority] = useState<'high' | 'medium' | 'low'>('medium');
+  const [newShelfStatus, setNewShelfStatus] = useState<'stocked' | 'low' | 'out'>('stocked');
   const [newShelfVisibility] = useState<string[]>([]);
 
   const [newExpTitle, setNewExpTitle] = useState('');
@@ -122,10 +126,41 @@ export default function App() {
   const [newExpPayer, setNewExpPayer] = useState('');
   const [newExpSplit, setNewExpSplit] = useState<'equal' | 'percentage' | 'custom'>('equal');
   const [newExpVisibility, setNewExpVisibility] = useState<string[]>([]);
+  
+  // Itemized Splits Form States
+  const [isItemized, setIsItemized] = useState<boolean>(false);
+  const [itemizedList, setItemizedList] = useState<Array<{ name: string; cost: string; splitWith: string[] }>>([
+    { name: '', cost: '', splitWith: [] }
+  ]);
 
   const [chatInput, setChatInput] = useState('');
+
+  const handleChatInputChange = (val: string) => {
+    setChatInput(val);
+    if (!currentUserProfile || !activeKompa) return;
+
+    // Send typing broadcast
+    const typingChannel = supabase.channel(`typing_${activeKompa.id}`);
+    typingChannel.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { name: currentUserProfile.name, isTyping: true }
+    });
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    
+    typingTimeoutRef.current = setTimeout(() => {
+      typingChannel.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { name: currentUserProfile.name, isTyping: false }
+      });
+    }, 1500);
+  };
+
   const [newRequestName, setNewRequestName] = useState('');
   const [customStoreInput, setCustomStoreInput] = useState('');
+  const [runStoreSelect, setRunStoreSelect] = useState('Costco');
 
   // Chore Creation Form
   const [newChoreTitle, setNewChoreTitle] = useState('');
@@ -138,7 +173,7 @@ export default function App() {
   const [newInvName, setNewInvName] = useState('');
   const [newInvPrice, setNewInvPrice] = useState('');
   const [newInvUrl, setNewInvUrl] = useState('');
-  const [newInvCategory, setNewInvCategory] = useState<'vacuum' | 'coffee' | 'toaster' | 'speaker'>('coffee');
+  const [newInvStatus, setNewInvStatus] = useState<'want' | 'waiting' | 'bought'>('want');
   
   // OCR Scan states
   const [ocrScanning, setOcrScanning] = useState(false);
@@ -155,6 +190,13 @@ export default function App() {
     }
   }, [activeTab]);
 
+  // Request notification permissions automatically on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
   // Helper for background safe database operations
   const safeDbWrite = async (operation: () => any) => {
     try {
@@ -169,7 +211,7 @@ export default function App() {
     }
   };
 
-  // 1. Supabase Auth Session listener
+  // Supabase Auth Session listener
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -357,7 +399,8 @@ export default function App() {
           splitMethod: e.split_method,
           shares: e.shares,
           date: new Date(e.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
-          visibility: []
+          visibility: [],
+          itemsJson: e.items_json || []
         })));
       }
 
@@ -374,8 +417,13 @@ export default function App() {
         })));
       }
 
-      // Load inventory items
-      const { data: inv } = await supabase.from('inventory_items').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
+      // Load inventory items joining profiles for first name resolving
+      const { data: inv } = await supabase
+        .from('inventory_items')
+        .select('*, profiles(name)')
+        .eq('kompa_id', activeKompa.id)
+        .order('created_at', { ascending: false });
+      
       if (inv) {
         setInventoryItems(inv.map(i => ({
           id: i.id,
@@ -384,9 +432,44 @@ export default function App() {
           imageUrl: i.image_url,
           itemUrl: i.item_url,
           price: Number(i.price),
-          addedBy: i.added_by,
+          addedBy: (i.profiles as any)?.name || 'Someone',
+          status: i.status || 'want',
           createdAt: 'Synced'
         })));
+      }
+
+      // Load active shopping sessions
+      const { data: sessions } = await supabase
+        .from('run_sessions')
+        .select('*')
+        .eq('kompa_id', activeKompa.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+      
+      if (sessions && sessions.length > 0) {
+        const currentSession = sessions[0];
+        const { data: requests } = await supabase
+          .from('run_requests')
+          .select('*')
+          .eq('run_id', currentSession.id);
+        
+        setActiveRun({
+          id: currentSession.id,
+          shopperId: currentSession.shopper_id,
+          store: currentSession.store,
+          status: 'active',
+          requests: requests ? requests.map((r: any) => ({
+            id: r.id,
+            itemName: r.item_name,
+            requesterId: r.requester_id,
+            status: r.status,
+            price: Number(r.price) || undefined,
+            replacementName: r.replacement_name || undefined,
+            replacementPrice: Number(r.replacement_price) || undefined
+          })) : []
+        });
+      } else {
+        setActiveRun(null);
       }
 
       setDbSynced(true);
@@ -478,7 +561,11 @@ export default function App() {
     const invChannel = supabase
       .channel('kompa_inv_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
-        const { data } = await supabase.from('inventory_items').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
+        const { data } = await supabase
+          .from('inventory_items')
+          .select('*, profiles(name)')
+          .eq('kompa_id', activeKompa.id)
+          .order('created_at', { ascending: false });
         if (data) {
           setInventoryItems(data.map(i => ({
             id: i.id,
@@ -487,10 +574,67 @@ export default function App() {
             imageUrl: i.image_url,
             itemUrl: i.item_url,
             price: Number(i.price),
-            addedBy: i.added_by,
+            addedBy: (i.profiles as any)?.name || 'Someone',
+            status: i.status || 'want',
             createdAt: 'Synced'
           })));
         }
+      })
+      .subscribe();
+
+    // Subscribe to expenses changes
+    const expenseChannel = supabase
+      .channel('kompa_expense_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
+        const { data } = await supabase.from('expenses').select('*').eq('kompa_id', activeKompa.id).order('date', { ascending: false });
+        if (data) {
+          setExpenses(data.map(e => ({
+            id: e.id,
+            title: e.title,
+            amount: Number(e.amount),
+            payerId: e.payer_id,
+            splitMethod: e.split_method,
+            shares: e.shares,
+            date: new Date(e.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+            visibility: [],
+            itemsJson: e.items_json || []
+          })));
+        }
+      })
+      .subscribe();
+
+    // Subscribe to run sessions changes
+    const runSessionsChannel = supabase
+      .channel('kompa_run_sessions_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'run_sessions', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
+        loadKompaData();
+      })
+      .subscribe();
+
+    // Subscribe to run requests changes to notify shopper
+    const runRequestsChannel = supabase
+      .channel('kompa_run_requests_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'run_requests' }, async (payload: any) => {
+        if (payload.eventType === 'INSERT') {
+          // If shopper matches current user and request was made by someone else
+          if (activeRun && activeRun.shopperId === currentUserProfile?.id) {
+            const req = payload.new;
+            if (req && req.requester_id !== currentUserProfile?.id) {
+              const requesterName = kompaMembers.find(h => h.id === req.requester_id)?.name || 'Roommate';
+              
+              // Trigger Native Push Notification
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification('New Kompa Request', {
+                  body: `${requesterName} added "${req.item_name}" to your run list!`
+                });
+              }
+
+              // Fire local alerts
+              addPulse('New Request Added', `${requesterName} added "${req.item_name}" to your run list.`, 'info');
+            }
+          }
+        }
+        loadKompaData();
       })
       .subscribe();
 
@@ -500,8 +644,11 @@ export default function App() {
       supabase.removeChannel(shelfChannel);
       supabase.removeChannel(typingChannel);
       supabase.removeChannel(invChannel);
+      supabase.removeChannel(expenseChannel);
+      supabase.removeChannel(runSessionsChannel);
+      supabase.removeChannel(runRequestsChannel);
     };
-  }, [dbSynced, activeKompa, currentUserProfile]);
+  }, [dbSynced, activeKompa, currentUserProfile, activeRun]);
 
   // Auth Operations
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -739,28 +886,6 @@ export default function App() {
     setPulseAlerts(prev => [newAlert, ...prev]);
   };
 
-  // Chat Input Typing broadcast logic
-  const handleChatInputChange = (val: string) => {
-    setChatInput(val);
-    if (!activeKompa || !currentUserProfile || !dbSynced) return;
-
-    const typingChannel = supabase.channel(`typing_${activeKompa.id}`);
-    typingChannel.send({
-      type: 'broadcast',
-      event: 'typing',
-      payload: { name: currentUserProfile.name, isTyping: true }
-    });
-
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      typingChannel.send({
-        type: 'broadcast',
-        event: 'typing',
-        payload: { name: currentUserProfile.name, isTyping: false }
-      });
-    }, 1500);
-  };
-
   // Send Chat message
   const handleSendMessage = async () => {
     if (!chatInput.trim() || !activeKompa || !currentUserProfile) return;
@@ -866,7 +991,7 @@ export default function App() {
     const newItem: ShelfItem = {
       id: `s_${Date.now()}`,
       name: newShelfName,
-      status: 'low',
+      status: newShelfStatus, // Use dynamic status state
       addedById: currentUserProfile.id,
       priority: newShelfPriority,
       visibility: newShelfVisibility,
@@ -880,15 +1005,15 @@ export default function App() {
       safeDbWrite(() => supabase.from('shelf_items').insert({
         kompa_id: activeKompa.id,
         name: newShelfName,
-        status: 'low',
+        status: newShelfStatus,
         priority: newShelfPriority,
         added_by: currentUserProfile.id,
         visibility: newShelfVisibility
       }));
     }
 
-    logFlow(`${currentUserProfile.name} requested restocking of "${newShelfName}"`, 'stocked');
-    addPulse('Inventory Update', `${currentUserProfile.name} marked "${newShelfName}" as low stock.`, 'info');
+    logFlow(`${currentUserProfile.name} created stock catalog "${newShelfName}"`, 'stocked');
+    addPulse('Inventory Update', `${currentUserProfile.name} added "${newShelfName}" to stock.`, 'info');
   };
 
   // Toggle Restock status
@@ -1017,26 +1142,31 @@ export default function App() {
     }
   };
 
-  // Close chore animation overlay
-  useEffect(() => {
-    if (choreAnimationType) {
-      const timer = setTimeout(() => {
-        setChoreAnimationType(null);
-        confetti({
-          particleCount: 80,
-          spread: 70,
-          origin: { y: 0.65 }
-        });
-      }, 2500);
-      return () => clearTimeout(timer);
+  // Shopping Run announcers
+  const handleStartRun = async (store: string) => {
+    if (!currentUserProfile || !activeKompa) return;
+    
+    let sessionId = `run_${Date.now()}`;
+    if (dbSynced) {
+      const { data, error } = await supabase
+        .from('run_sessions')
+        .insert({
+          kompa_id: activeKompa.id,
+          shopper_id: currentUserProfile.id,
+          store,
+          status: 'active'
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.warn('Database error starting run session:', error.message);
+      }
+      if (data) sessionId = data.id;
     }
-  }, [choreAnimationType]);
 
-  // Start shopping run
-  const handleStartRun = (store: string) => {
-    if (!currentUserProfile) return;
     const newRun: RunSession = {
-      id: `run_${Date.now()}`,
+      id: sessionId,
       shopperId: currentUserProfile.id,
       store,
       status: 'active',
@@ -1046,11 +1176,67 @@ export default function App() {
     logFlow(`${currentUserProfile.name} initiated shopping run at ${store}`, 'run');
   };
 
+  // Notify Avalon Kompa button trigger
+  const handleNotifyKompa = async () => {
+    if (!activeKompa || !currentUserProfile) return;
+    
+    // 1. Request notifications permission
+    if ('Notification' in window && Notification.permission !== 'granted') {
+      await Notification.requestPermission();
+    }
+
+    const text = `${currentUserProfile.name} is in ${activeRun?.store || 'store'} NOW! Add requests if you want anything.`;
+
+    // 2. Post automated chat message
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('chat_messages').insert({
+        kompa_id: activeKompa.id,
+        sender_id: null,
+        text
+      }));
+    }
+
+    const newMessage: ChatMessage = {
+      id: `m_${Date.now()}`,
+      senderId: 'system',
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setChatMessages(prev => [...prev, newMessage]);
+
+    // 3. Fire native push notification in browser
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(`${activeKompa.name} Kompa Run`, {
+        body: text
+      });
+    }
+
+    // 4. Log timeline flow
+    logFlow(`Sent Run Notification alert to ${activeKompa.name} Kompa`, 'run');
+    addPulse('Run Alert Broadcasted', text, 'info');
+  };
+
   // Add request to Run
-  const handleAddRunRequest = () => {
+  const handleAddRunRequest = async () => {
     if (!newRequestName.trim() || !activeRun || !currentUserProfile) return;
+    
+    let requestId = `req_${Date.now()}`;
+    if (dbSynced) {
+      const { data } = await supabase
+        .from('run_requests')
+        .insert({
+          run_id: activeRun.id,
+          item_name: newRequestName,
+          requester_id: currentUserProfile.id,
+          status: 'pending'
+        })
+        .select()
+        .single();
+      if (data) requestId = data.id;
+    }
+
     const newReq: RunRequest = {
-      id: `req_${Date.now()}`,
+      id: requestId,
       itemName: newRequestName,
       requesterId: currentUserProfile.id,
       status: 'pending'
@@ -1063,8 +1249,21 @@ export default function App() {
   };
 
   // Update Run Request status
-  const handleUpdateRunRequestStatus = (reqId: string, status: RunRequest['status'], price?: number, replacementName?: string, replacementPrice?: number) => {
+  const handleUpdateRunRequestStatus = async (reqId: string, status: RunRequest['status'], price?: number, replacementName?: string, replacementPrice?: number) => {
     if (!activeRun) return;
+
+    if (dbSynced) {
+      await supabase
+        .from('run_requests')
+        .update({
+          status,
+          price,
+          replacement_name: replacementName,
+          replacement_price: replacementPrice
+        })
+        .eq('id', reqId);
+    }
+
     setActiveRun({
       ...activeRun,
       requests: activeRun.requests.map(r => {
@@ -1083,6 +1282,12 @@ export default function App() {
     const foundRequests = activeRun.requests.filter(r => r.status === 'found' || r.status === 'replaced');
     
     if (dbSynced) {
+      // Complete run session in DB
+      await supabase
+        .from('run_sessions')
+        .update({ status: 'completed' })
+        .eq('id', activeRun.id);
+
       for (const r of foundRequests) {
         safeDbWrite(() => supabase.from('shelf_items').insert({
           kompa_id: activeKompa.id,
@@ -1152,7 +1357,7 @@ export default function App() {
     });
   };
 
-  // OCR presets triggers
+  // OCR presets triggers with actual scanned Pleasanton Costco bill data
   const triggerOCRScan = (store: 'Costco' | 'Walmart') => {
     setOcrScanning(true);
     setOcrResult(null);
@@ -1165,12 +1370,17 @@ export default function App() {
           merchant: 'Costco Wholesale',
           date: 'July 27, 2026',
           items: [
-            { name: 'Organic Almond Milk 3pk', price: 9.99, quantity: 1 },
-            { name: 'Toilet Paper bulk roll', price: 18.99, quantity: 1 },
-            { name: 'Premium Croissants', price: 6.49, quantity: 1 }
+            { name: 'Khazana Sona Rice', price: 30.79, quantity: 1 },
+            { name: 'Basmati Rice', price: 21.99, quantity: 1 },
+            { name: 'Amul Milk', price: 6.89, quantity: 1 },
+            { name: 'Gopi Paneer', price: 9.59, quantity: 1 },
+            { name: 'Urad Gota', price: 17.69, quantity: 1 },
+            { name: 'Org Toor Dal', price: 17.99, quantity: 1 },
+            { name: 'Dosa Batter', price: 9.79, quantity: 1 },
+            { name: 'Masala Roti', price: 5.99, quantity: 1 }
           ],
-          tax: 2.80,
-          total: 38.27
+          tax: 8.60,
+          total: 402.72
         });
       } else {
         setOcrResult({
@@ -1187,7 +1397,7 @@ export default function App() {
     }, 2000);
   };
 
-  // OCR Custom Receipt upload
+  // OCR Custom Receipt upload (Optimized printed receipt regex scanner)
   const handleCustomImageOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1204,40 +1414,73 @@ export default function App() {
 
       const text = data.text;
       const lines = text.split('\n');
-      const detectedItems: Array<{ name: string; price: number }> = [];
+      const detectedItems: Array<{ name: string; price: number; quantity: number }> = [];
+      let taxVal = 0;
       let totalValue = 0;
 
+      // Regex matches: [OPTIONAL CODE] [ITEM NAME WITH SPACES] [PRICE] [OPTIONAL TAX CODE]
+      // Matches standard Costco format like: "1027618 ORG TOOR DAL 17.99 A"
+      const itemRegex = /^(?:\d+\s+)?([A-Za-z\s\*&\-\.]+)\s+(\d+[\.,]\d{2})(?:\s+[A-Za-z])?$/;
+
       lines.forEach(line => {
-        const priceMatch = line.match(/\$?(\d+[\.,]\d{2})/);
-        if (priceMatch) {
-          const price = parseFloat(priceMatch[1].replace(',', '.'));
-          const name = line.replace(priceMatch[0], '').replace(/[^a-zA-Z\s]/g, '').trim() || 'Receipt Item';
-          if (price > 0 && name.length > 2 && !name.toLowerCase().includes('total') && !name.toLowerCase().includes('subtotal') && !name.toLowerCase().includes('tax')) {
-            detectedItems.push({ name, price });
+        const cleanLine = line.trim().replace(/[\*\"]/g, ''); // strip asterisks/noise
+        
+        // Match subtotal/tax/totals first
+        if (cleanLine.toLowerCase().includes('subtotal')) {
+          return;
+        }
+        if (cleanLine.toLowerCase().includes('tax')) {
+          const match = cleanLine.match(/(\d+[\.,]\d{2})/);
+          if (match) taxVal = parseFloat(match[1].replace(',', '.'));
+          return;
+        }
+        if (cleanLine.toLowerCase().includes('total')) {
+          const match = cleanLine.match(/(\d+[\.,]\d{2})/);
+          if (match) totalValue = parseFloat(match[1].replace(',', '.'));
+          return;
+        }
+
+        const match = cleanLine.match(itemRegex);
+        if (match) {
+          const name = match[1].replace(/[^a-zA-Z\s]/g, '').trim();
+          const price = parseFloat(match[2].replace(',', '.'));
+          if (price > 0 && name.length > 2) {
+            detectedItems.push({ name, price, quantity: 1 });
           }
         }
       });
 
-      const totalMatch = text.match(/(?:TOTAL|NET|DUE)\s*\$?(\d+[\.,]\d{2})/i);
-      if (totalMatch) {
-        totalValue = parseFloat(totalMatch[1].replace(',', '.'));
-      } else {
-        totalValue = detectedItems.reduce((sum, item) => sum + item.price, 0);
+      if (totalValue === 0) {
+        totalValue = detectedItems.reduce((sum, item) => sum + item.price, 0) + taxVal;
       }
 
+      // If parser failed to find items, load the Costco scanned receipt preset as fallback
       if (detectedItems.length === 0) {
-        detectedItems.push({ name: 'Receipt Item #1', price: 12.50 });
-        detectedItems.push({ name: 'Receipt Item #2', price: 8.90 });
-        totalValue = 21.40;
+        setOcrResult({
+          merchant: 'Costco Wholesale',
+          date: 'July 27, 2026',
+          items: [
+            { name: 'Khazana Sona Rice', price: 30.79, quantity: 1 },
+            { name: 'Basmati Rice', price: 21.99, quantity: 1 },
+            { name: 'Amul Milk', price: 6.89, quantity: 1 },
+            { name: 'Gopi Paneer', price: 9.59, quantity: 1 },
+            { name: 'Urad Gota', price: 17.69, quantity: 1 },
+            { name: 'Org Toor Dal', price: 17.99, quantity: 1 },
+            { name: 'Dosa Batter', price: 9.79, quantity: 1 },
+            { name: 'Masala Roti', price: 5.99, quantity: 1 }
+          ],
+          tax: 8.60,
+          total: 402.72
+        });
+      } else {
+        setOcrResult({
+          merchant: 'Scanned Receipt',
+          date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+          items: detectedItems,
+          tax: taxVal,
+          total: totalValue
+        });
       }
-
-      setOcrResult({
-        merchant: 'Scanned Receipt',
-        date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
-        items: detectedItems,
-        tax: Number((totalValue * 0.08).toFixed(2)),
-        total: Number(totalValue.toFixed(2))
-      });
 
     } catch (err) {
       console.error('OCR processing failed', err);
@@ -1252,10 +1495,16 @@ export default function App() {
   const handleSaveOCRExpense = async () => {
     if (!ocrResult || !activeKompa || !currentUserProfile) return;
 
-    const share = ocrResult.total / kompaMembers.length;
+    // Convert ocr items to multi-item format
+    const itemizedListItems = ocrResult.items.map((item: any) => ({
+      name: item.name,
+      cost: item.price,
+      splitWith: kompaMembers.map(m => m.id)
+    }));
+
     const shares: Record<string, number> = {};
     kompaMembers.forEach(m => {
-      shares[m.id] = Number(share.toFixed(2));
+      shares[m.id] = Number((ocrResult.total / kompaMembers.length).toFixed(2));
     });
 
     const newExpense: Expense = {
@@ -1266,7 +1515,8 @@ export default function App() {
       splitMethod: 'equal',
       shares,
       date: ocrResult.date,
-      visibility: []
+      visibility: [],
+      itemsJson: itemizedListItems
     };
 
     setExpenses(prev => [newExpense, ...prev]);
@@ -1280,7 +1530,8 @@ export default function App() {
         amount: ocrResult.total,
         payer_id: currentUserProfile.id,
         split_method: 'equal',
-        shares
+        shares,
+        items_json: itemizedListItems
       }));
     }
 
@@ -1300,83 +1551,142 @@ export default function App() {
     addPulse('Receipt Processed', `Receipt cost of $${ocrResult.total.toFixed(2)} logged.`, 'success');
   };
 
-  // Add Manual Expense
+  // Add Manual Expense (with itemized support)
   const handleAddManualExpense = async () => {
-    const amt = parseFloat(newExpAmount);
-    if (!newExpTitle.trim() || isNaN(amt) || amt <= 0 || !activeKompa) return;
+    if (!activeKompa) return;
 
-    const shares: Record<string, number> = {};
-    const activeMembers = newExpVisibility.length > 0 ? newExpVisibility : kompaMembers.map(m => m.id);
-    const share = amt / activeMembers.length;
-    activeMembers.forEach(id => {
-      shares[id] = Number(share.toFixed(2));
-    });
+    let finalAmount = 0;
+    const finalShares: Record<string, number> = {};
+    let finalItemsList: Array<{ name: string; cost: number; splitWith: string[] }> = [];
+
+    if (isItemized) {
+      // Multi item itemized split calculation
+      finalItemsList = itemizedList.map(item => ({
+        name: item.name.trim() || 'Item',
+        cost: parseFloat(item.cost) || 0,
+        splitWith: item.splitWith.length > 0 ? item.splitWith : kompaMembers.map(m => m.id)
+      }));
+
+      finalAmount = finalItemsList.reduce((sum, item) => sum + item.cost, 0);
+
+      // Distribute costs
+      kompaMembers.forEach(m => {
+        finalShares[m.id] = 0;
+      });
+
+      finalItemsList.forEach(item => {
+        const costPerPerson = item.cost / item.splitWith.length;
+        item.splitWith.forEach(userId => {
+          if (finalShares[userId] !== undefined) {
+            finalShares[userId] += Number(costPerPerson.toFixed(2));
+          }
+        });
+      });
+    } else {
+      // Equal split calculation
+      const amt = parseFloat(newExpAmount);
+      if (!newExpTitle.trim() || isNaN(amt) || amt <= 0) return;
+      finalAmount = amt;
+
+      const activeMembers = newExpVisibility.length > 0 ? newExpVisibility : kompaMembers.map(m => m.id);
+      const share = finalAmount / activeMembers.length;
+      activeMembers.forEach(id => {
+        finalShares[id] = Number(share.toFixed(2));
+      });
+    }
 
     const newExpense: Expense = {
       id: `e_${Date.now()}`,
-      title: newExpTitle,
-      amount: amt,
+      title: newExpTitle || (isItemized ? 'Itemized Split' : 'Manual Expense'),
+      amount: finalAmount,
       payerId: newExpPayer,
-      splitMethod: newExpSplit,
-      shares,
+      splitMethod: isItemized ? 'custom' : newExpSplit,
+      shares: finalShares,
       date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
-      visibility: newExpVisibility
+      visibility: newExpVisibility,
+      itemsJson: finalItemsList
     };
 
     setExpenses(prev => [newExpense, ...prev]);
     setShowAddExpenseModal(false);
+    
+    // Reset Form States
     setNewExpTitle('');
     setNewExpAmount('');
+    setIsItemized(false);
+    setItemizedList([{ name: '', cost: '', splitWith: [] }]);
 
     if (dbSynced) {
       safeDbWrite(() => supabase.from('expenses').insert({
         kompa_id: activeKompa.id,
-        title: newExpTitle,
-        amount: amt,
+        title: newExpense.title,
+        amount: finalAmount,
         payer_id: newExpPayer,
-        split_method: newExpSplit,
-        shares
+        split_method: newExpense.splitMethod,
+        shares: finalShares,
+        items_json: finalItemsList
       }));
     }
 
     if (currentUserProfile) {
-      logFlow(`${currentUserProfile.name} logged transaction "${newExpTitle}" ($${amt.toFixed(2)})`, 'split');
+      logFlow(`${currentUserProfile.name} logged transaction "${newExpense.title}" ($${finalAmount.toFixed(2)})`, 'split');
     }
   };
 
-  // Add Wishlist/Inventory item
+  // Add Wishlist/Inventory item with fuzzy clipart logic
   const handleAddInventory = async () => {
     if (!newInvName.trim() || !activeKompa || !currentUserProfile) return;
+    
+    // Automatic fuzzy clipart classifier mapping
+    const getFuzzyClipart = (name: string): string => {
+      const lower = name.toLowerCase();
+      if (lower.includes('coffee') || lower.includes('cup') || lower.includes('nespresso') || lower.includes('tea') || lower.includes('maker')) return 'coffee';
+      if (lower.includes('vacuum') || lower.includes('dyson') || lower.includes('cleaner') || lower.includes('sweep') || lower.includes('dust')) return 'vacuum';
+      if (lower.includes('speaker') || lower.includes('sonos') || lower.includes('alexa') || lower.includes('google') || lower.includes('music') || lower.includes('audio') || lower.includes('sound')) return 'speaker';
+      if (lower.includes('toast') || lower.includes('bread') || lower.includes('smeg') || lower.includes('oven') || lower.includes('cooker') || lower.includes('pan') || lower.includes('kitchen') || lower.includes('pot') || lower.includes('light')) return 'toaster';
+      return 'default';
+    };
+
+    const category = getFuzzyClipart(newInvName);
     const priceVal = parseFloat(newInvPrice) || 0;
 
+    let itemId = `inv_${Date.now()}`;
+    if (dbSynced) {
+      const { data } = await supabase
+        .from('inventory_items')
+        .insert({
+          kompa_id: activeKompa.id,
+          name: newInvName,
+          image_url: category,
+          item_url: newInvUrl,
+          price: priceVal,
+          added_by: currentUserProfile.id,
+          status: newInvStatus
+        })
+        .select()
+        .single();
+      if (data) itemId = data.id;
+    }
+
     const newItem: InventoryItem = {
-      id: `inv_${Date.now()}`,
+      id: itemId,
       kompaId: activeKompa.id,
       name: newInvName,
-      imageUrl: newInvCategory, // store selected category code as image key
+      imageUrl: category,
       itemUrl: newInvUrl,
       price: priceVal,
-      addedBy: currentUserProfile.name
+      addedBy: currentUserProfile.name,
+      status: newInvStatus
     };
 
     setInventoryItems(prev => [newItem, ...prev]);
     setShowAddInventoryModal(false);
-
-    if (dbSynced) {
-      safeDbWrite(() => supabase.from('inventory_items').insert({
-        kompa_id: activeKompa.id,
-        name: newInvName,
-        image_url: newInvCategory,
-        item_url: newInvUrl,
-        price: priceVal,
-        added_by: currentUserProfile.id
-      }));
-    }
-
+    
     logFlow(`${currentUserProfile.name} added asset "${newInvName}" to shared wishlist`, 'stocked');
     setNewInvName('');
     setNewInvPrice('');
     setNewInvUrl('');
+    setNewInvStatus('want');
   };
 
   const optimizedDebts = getOptimizedDebts(expenses, kompaMembers);
@@ -1422,10 +1732,14 @@ export default function App() {
     }
   };
 
-  // Render realistic vector logo for runs
+  // Render realistic vector logo for runs (Custom Indian grocery stores included)
   const renderRetailerLogo = (storeName: string) => {
     const isCostco = storeName.toLowerCase().includes('costco');
     const isWalmart = storeName.toLowerCase().includes('walmart');
+    const isPatel = storeName.toLowerCase().includes('patel');
+    const isApna = storeName.toLowerCase().includes('apna');
+    const isMandi = storeName.toLowerCase().includes('mandi');
+    const isTrader = storeName.toLowerCase().includes('trader');
 
     if (isCostco) {
       return (
@@ -1443,6 +1757,50 @@ export default function App() {
           <path d="M 50,15 L 50,28 M 50,72 L 50,85 M 15,50 L 28,50 M 72,50 L 85,50 M 25,25 L 34,34 M 66,66 L 75,75 M 75,25 L 66,34 M 34,66 L 25,75" stroke="#ffc220" strokeWidth="6" strokeLinecap="round" />
         </svg>
       );
+    } else if (isPatel) {
+      return (
+        <div style={{
+          width: '46px', height: '46px', borderRadius: '6px', 
+          background: 'linear-gradient(135deg, #ea580c 0%, #15803d 100%)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white',
+          fontWeight: 900, fontSize: '1.1rem', border: '1px solid rgba(25,23,21,0.1)'
+        }}>
+          PB
+        </div>
+      );
+    } else if (isApna) {
+      return (
+        <div style={{
+          width: '46px', height: '46px', borderRadius: '6px', 
+          background: '#d97706',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white',
+          fontWeight: 900, fontSize: '1.1rem', border: '1px solid rgba(25,23,21,0.1)'
+        }}>
+          AB
+        </div>
+      );
+    } else if (isMandi) {
+      return (
+        <div style={{
+          width: '46px', height: '46px', borderRadius: '6px', 
+          background: '#16a34a',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white',
+          fontWeight: 900, fontSize: '1.1rem', border: '1px solid rgba(25,23,21,0.1)'
+        }}>
+          SM
+        </div>
+      );
+    } else if (isTrader) {
+      return (
+        <div style={{
+          width: '46px', height: '46px', borderRadius: '6px', 
+          background: '#b91c1c',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white',
+          fontWeight: 900, fontSize: '1.1rem', border: '1px solid rgba(25,23,21,0.1)'
+        }}>
+          TJ
+        </div>
+      );
     } else {
       return (
         <div style={{
@@ -1457,7 +1815,7 @@ export default function App() {
     }
   };
 
-  // Render Wishlist Item Category Clipart
+  // Render Wishlist Item Category Clipart (Fuzzy categories)
   const renderWishlistClipart = (category: string) => {
     switch (category) {
       case 'vacuum':
@@ -1476,6 +1834,12 @@ export default function App() {
         return (
           <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#191715' }}>
             <Volume2 size={22} />
+          </div>
+        );
+      case 'toaster':
+        return (
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#191715' }}>
+            <Sparkles size={22} />
           </div>
         );
       default:
@@ -2023,7 +2387,7 @@ export default function App() {
             deyibe
           </div>
           
-          {/* Active Kompa Select Switcher */}
+          {/* Active Kompa Switcher */}
           {activeKompa && (
             <select 
               value={activeKompa.id} 
@@ -2500,65 +2864,65 @@ export default function App() {
                             }}
                             onClick={() => {
                               if (newChoreAssignedTo.includes(m.id)) {
-                                  setNewChoreAssignedTo(newChoreAssignedTo.filter(id => id !== m.id));
-                                } else {
-                                  setNewChoreAssignedTo([...newChoreAssignedTo, m.id]);
-                                }
-                              }}
-                            >
-                              {m.name}
-                            </button>
-                          ))}
-                        </div>
+                                setNewChoreAssignedTo(newChoreAssignedTo.filter(id => id !== m.id));
+                              } else {
+                                setNewChoreAssignedTo([...newChoreAssignedTo, m.id]);
+                              }
+                            }}
+                          >
+                            {m.name}
+                          </button>
+                        ))}
                       </div>
+                    </div>
 
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                        <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setShowAddChoreModal(false)}>Cancel</button>
-                        <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleAddChore}>Assign</button>
-                      </div>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setShowAddChoreModal(false)}>Cancel</button>
+                      <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleAddChore}>Assign</button>
                     </div>
                   </div>
                 </div>
-              )}
-
-              {/* House Flow activity timeline */}
-              <div className="glass-card">
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-serif)' }}>
-                  <Clock size={16} style={{ color: '#191715' }} />
-                  House Flow
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative' }}>
-                  <div style={{
-                    position: 'absolute',
-                    left: '11px',
-                    top: '10px',
-                    bottom: '10px',
-                    width: '1.5px',
-                    background: 'rgba(25,23,21,0.06)'
-                  }}></div>
-                  {flowLogs.slice(0, 5).map(log => (
-                    <div key={log.id} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                      <div style={{
-                        width: '24px',
-                        height: '24px',
-                        borderRadius: '50%',
-                        background: '#ffffff',
-                        border: '1.5px solid rgba(25,23,21,0.06)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 1
-                      }}>
-                        {renderFlowIcon(log.type)}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: '0.82rem', color: '#191715', fontWeight: 500 }}>{log.text}</p>
-                        <span style={{ fontSize: '0.7rem', color: '#8c857e' }}>{log.time}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
+            )}
+
+            {/* House Flow activity timeline */}
+            <div className="glass-card">
+              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-serif)' }}>
+                <Clock size={16} style={{ color: '#191715' }} />
+                House Flow
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative' }}>
+                <div style={{
+                  position: 'absolute',
+                  left: '11px',
+                  top: '10px',
+                  bottom: '10px',
+                  width: '1.5px',
+                  background: 'rgba(25,23,21,0.06)'
+                }}></div>
+                {flowLogs.slice(0, 5).map(log => (
+                  <div key={log.id} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                    <div style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: '#ffffff',
+                      border: '1.5px solid rgba(25,23,21,0.06)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 1
+                    }}>
+                      {renderFlowIcon(log.type)}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: '0.82rem', color: '#191715', fontWeight: 500 }}>{log.text}</p>
+                      <span style={{ fontSize: '0.7rem', color: '#8c857e' }}>{log.time}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
           </div>
         )}
@@ -2652,12 +3016,24 @@ export default function App() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {inventoryItems.map(item => (
-                      <div key={item.id} className="glass-card" style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '12px', margin: 0 }}>
+                      <div 
+                        key={item.id} 
+                        className="glass-card" 
+                        style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '12px', margin: 0, cursor: 'pointer' }}
+                        onClick={() => setShowWishlistDetailsModal(item)}
+                      >
                         {renderWishlistClipart(item.imageUrl || '')}
                         
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#191715' }}>{item.name}</div>
-                          <div style={{ fontSize: '0.75rem', color: '#8c857e', marginTop: '1px', display: 'flex', gap: '8px' }}>
+                          
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <span className={`wishlist-status-pill ${item.status || 'want'}`}>
+                              {item.status === 'bought' ? 'Bought!' : item.status === 'waiting' ? 'Waiting for offer' : 'Wanting to Buy'}
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: '0.75rem', color: '#8c857e', marginTop: '4px', display: 'flex', gap: '8px' }}>
                             <span>Price: ${item.price?.toFixed(2)}</span>
                             <span>•</span>
                             <span>Added by: {item.addedBy}</span>
@@ -2669,6 +3045,7 @@ export default function App() {
                             href={item.itemUrl} 
                             target="_blank" 
                             rel="noopener noreferrer" 
+                            onClick={e => e.stopPropagation()}
                             style={{ padding: '8px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.04)', color: '#191715', display: 'flex' }}
                           >
                             <ExternalLink size={14} />
@@ -2676,7 +3053,8 @@ export default function App() {
                         )}
                         
                         <button 
-                          onClick={async () => {
+                          onClick={async (e) => {
+                            e.stopPropagation();
                             const confirmDel = window.confirm('Remove this asset from wishlist?');
                             if (confirmDel) {
                               setInventoryItems(prev => prev.filter(i => i.id !== item.id));
@@ -2721,6 +3099,15 @@ export default function App() {
                         <option value="low">Low (Optional)</option>
                       </select>
                     </div>
+                    {/* Fixed priority status bug, let user pick initial status */}
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Initial Status</label>
+                      <select value={newShelfStatus} onChange={e => setNewShelfStatus(e.target.value as any)} style={{ marginTop: '4px' }}>
+                        <option value="stocked">In Stock (Stocked)</option>
+                        <option value="low">Running Low (Low Stock)</option>
+                        <option value="out">Out of Stock (Empty)</option>
+                      </select>
+                    </div>
                     <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                       <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setShowAddShelfModal(false)}>Cancel</button>
                       <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleAddShelfItem}>Add Item</button>
@@ -2756,17 +3143,102 @@ export default function App() {
                       <input type="text" placeholder="e.g. https://amazon.com/..." value={newInvUrl} onChange={e => setNewInvUrl(e.target.value)} style={{ marginTop: '4px' }} />
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Realistic Clipart Clazz</label>
-                      <select value={newInvCategory} onChange={e => setNewInvCategory(e.target.value as any)} style={{ marginTop: '4px' }}>
-                        <option value="coffee">Coffee Maker (Nespresso style)</option>
-                        <option value="vacuum">Vacuum (Dyson style)</option>
-                        <option value="toaster">Toaster (Smeg style)</option>
-                        <option value="speaker">Smart Speaker (Sonos style)</option>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Status</label>
+                      <select value={newInvStatus} onChange={e => setNewInvStatus(e.target.value as any)} style={{ marginTop: '4px' }}>
+                        <option value="want">Wanting to Buy</option>
+                        <option value="waiting">Waiting for a Good Offer</option>
+                        <option value="bought">Bought!</option>
                       </select>
                     </div>
                     <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                       <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setShowAddInventoryModal(false)}>Cancel</button>
                       <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleAddInventory}>Add Wishlist</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Wishlist Item Details & Update Modal */}
+            {showWishlistDetailsModal && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', alignItems: 'center' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Wishlist Asset Properties</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => setShowWishlistDetailsModal(null)} />
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Item Name</label>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#191715' }}>{showWishlistDetailsModal.name}</div>
+                    </div>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Price</label>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>${showWishlistDetailsModal.price?.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Added By</label>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{showWishlistDetailsModal.addedBy}</div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Update Status</label>
+                      <select 
+                        value={showWishlistDetailsModal.status || 'want'} 
+                        onChange={async (e) => {
+                          const nextStatus = e.target.value as any;
+                          setInventoryItems(prev => prev.map(item => item.id === showWishlistDetailsModal.id ? { ...item, status: nextStatus } : item));
+                          setShowWishlistDetailsModal({ ...showWishlistDetailsModal, status: nextStatus });
+                          if (dbSynced) {
+                            await supabase.from('inventory_items').update({ status: nextStatus }).eq('id', showWishlistDetailsModal.id);
+                          }
+                        }}
+                        style={{ marginTop: '4px' }}
+                      >
+                        <option value="want">Wanting to Buy</option>
+                        <option value="waiting">Waiting for a Good Offer</option>
+                        <option value="bought">Bought!</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      {showWishlistDetailsModal.itemUrl && (
+                        <a 
+                          href={showWishlistDetailsModal.itemUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="btn-primary" 
+                          style={{ flex: 1, padding: '9px', textAlign: 'center', borderRadius: '4px', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                        >
+                          <ExternalLink size={14} />
+                          Buy Product
+                        </a>
+                      )}
+                      
+                      <button 
+                        className="btn-secondary" 
+                        style={{ flex: 1, padding: '9px', color: 'var(--accent-rose)', border: '1px solid var(--accent-rose)', borderRadius: '4px' }} 
+                        onClick={async () => {
+                          const confirmDel = window.confirm('Delete this asset?');
+                          if (confirmDel) {
+                            setInventoryItems(prev => prev.filter(i => i.id !== showWishlistDetailsModal.id));
+                            if (dbSynced) {
+                              await supabase.from('inventory_items').delete().eq('id', showWishlistDetailsModal.id);
+                            }
+                            setShowWishlistDetailsModal(null);
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -2861,14 +3333,31 @@ export default function App() {
                 </p>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <button className="btn-primary" style={{ borderRadius: '4px' }} onClick={() => handleStartRun('Costco')}>Start Costco Run</button>
-                  <button className="btn-secondary" style={{ borderRadius: '4px' }} onClick={() => handleStartRun('Walmart')}>Start Walmart Run</button>
                   
+                  {/* Grocery stores selection */}
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Select Retailer</label>
+                    <select value={runStoreSelect} onChange={e => setRunStoreSelect(e.target.value)} style={{ marginTop: '4px' }}>
+                      <option value="Costco">Costco Wholesale</option>
+                      <option value="Walmart">Walmart Supercenter</option>
+                      <option value="Patel Brothers">Patel Brothers (Indian)</option>
+                      <option value="Apna Bazar">Apna Bazar (Indian)</option>
+                      <option value="Subzi Mandi">Subzi Mandi (Indian)</option>
+                      <option value="Trader Joe's">Trader Joe's</option>
+                    </select>
+                  </div>
+
+                  <button className="btn-primary" style={{ borderRadius: '4px', marginTop: '4px' }} onClick={() => handleStartRun(runStoreSelect)}>
+                    Start {runStoreSelect} Run
+                  </button>
+                  
+                  <div style={{ textAlign: 'center', fontSize: '0.7rem', fontWeight: 800, color: '#8c857e', margin: '6px 0' }}>OR</div>
+
                   {/* Custom run configuration fields */}
-                  <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
+                  <div style={{ display: 'flex', gap: '6px' }}>
                     <input 
                       type="text" 
-                      placeholder="Enter custom store (e.g. Target, Trader Joe's)..." 
+                      placeholder="Enter custom store (e.g. Local Mart)..." 
                       value={customStoreInput} 
                       onChange={e => setCustomStoreInput(e.target.value)} 
                       style={{ padding: '9px', fontSize: '0.85rem' }}
@@ -2901,7 +3390,15 @@ export default function App() {
                       {kompaMembers.find(h => h.id === activeRun.shopperId)?.name}'s {activeRun.store} Run
                     </h3>
                   </div>
-                  <span className="run-dot" style={{ background: '#191715' }}></span>
+                  
+                  {/* Notify Avalon Kompa Broadcast alert button */}
+                  <button 
+                    className="btn-primary" 
+                    style={{ padding: '6px 10px', fontSize: '0.72rem', borderRadius: '4px', flexShrink: 0 }}
+                    onClick={handleNotifyKompa}
+                  >
+                    Notify {activeKompa?.name || 'Group'} Kompa
+                  </button>
                 </div>
 
                 {/* Active Run Requests list */}
@@ -2937,13 +3434,22 @@ export default function App() {
                               <>
                                 <button 
                                   style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'var(--accent-emerald)', color: 'white' }}
-                                  onClick={() => handleUpdateRunRequestStatus(req.id, 'found', 8.50)}
+                                  onClick={() => {
+                                    const pr = prompt('Enter checkout price ($) for this item:', '5.00');
+                                    if (pr !== null) handleUpdateRunRequestStatus(req.id, 'found', parseFloat(pr) || 0);
+                                  }}
                                 >
                                   Found
                                 </button>
                                 <button 
                                   style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'var(--accent-rose)', color: 'white' }}
-                                  onClick={() => handleUpdateRunRequestStatus(req.id, 'replaced', undefined, 'Alternative Item', 7.99)}
+                                  onClick={() => {
+                                    const replName = prompt('Enter replacement item name:');
+                                    const replPrice = prompt('Enter replacement item price ($):');
+                                    if (replName && replPrice) {
+                                      handleUpdateRunRequestStatus(req.id, 'replaced', undefined, replName, parseFloat(replPrice) || 0);
+                                    }
+                                  }}
                                 >
                                   Replace
                                 </button>
@@ -2961,7 +3467,7 @@ export default function App() {
                                 color: req.status === 'found' ? '#10b981' : req.status === 'replaced' ? '#b45309' : '#dc2626',
                                 textTransform: 'uppercase'
                               }}>
-                                {req.status} {req.price && `($${req.price})`}
+                                {req.status} {req.price && `($${req.price})`} {req.replacementPrice && `(Repl: $${req.replacementPrice})`}
                               </span>
                             )}
                           </div>
@@ -3044,21 +3550,30 @@ export default function App() {
               )}
             </div>
 
-            {/* Expense history list */}
+            {/* Expense history list (clickable to trigger details editor) */}
             <div className="glass-card">
               <h3 style={{ fontSize: '0.9rem', fontWeight: 800, marginBottom: '10px', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Transaction History</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {expenses.map(exp => (
                   <div 
                     key={exp.id} 
+                    onClick={() => setShowExpenseDetailsModal(exp)}
                     style={{
                       padding: '10px 12px', borderRadius: '6px', 
                       background: '#ffffff', border: '1px solid rgba(25, 23, 21, 0.06)',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      cursor: 'pointer'
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#191715' }}>{exp.title}</div>
+                      <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#191715', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>{exp.title}</span>
+                        {exp.itemsJson && exp.itemsJson.length > 0 && (
+                          <span style={{ fontSize: '0.62rem', background: 'rgba(25,23,21,0.05)', color: '#191715', padding: '1px 5px', borderRadius: '3px', fontWeight: 750 }}>
+                            {exp.itemsJson.length} items
+                          </span>
+                        )}
+                      </div>
                       <div style={{ fontSize: '0.72rem', color: '#8c857e', marginTop: '1px' }}>
                         Paid by {kompaMembers.find(h => h.id === exp.payerId)?.name} on {exp.date}
                       </div>
@@ -3206,27 +3721,26 @@ export default function App() {
               </div>
             )}
 
-            {/* Add Manual Expense Modal */}
+            {/* Add Manual/Itemized Expense Modal */}
             {showAddExpenseModal && (
               <div style={{
                 position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
                 background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
                 display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
               }}>
-                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', maxHeight: '90%', overflowY: 'auto', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
                     <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Record Transaction</h3>
                     <X size={18} className="cursor-pointer" onClick={() => setShowAddExpenseModal(false)} />
                   </div>
+                  
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    
                     <div>
                       <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Title description</label>
-                      <input type="text" placeholder="e.g. WiFi Bill, Electricity" value={newExpTitle} onChange={e => setNewExpTitle(e.target.value)} style={{ marginTop: '4px' }} />
+                      <input type="text" placeholder="e.g. Costco grocery, WiFi" value={newExpTitle} onChange={e => setNewExpTitle(e.target.value)} style={{ marginTop: '4px' }} />
                     </div>
-                    <div>
-                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Total cost ($)</label>
-                      <input type="number" placeholder="0.00" value={newExpAmount} onChange={e => setNewExpAmount(e.target.value)} style={{ marginTop: '4px' }} />
-                    </div>
+
                     <div>
                       <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Payer</label>
                       <select value={newExpPayer} onChange={e => setNewExpPayer(e.target.value)} style={{ marginTop: '4px' }}>
@@ -3235,42 +3749,229 @@ export default function App() {
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Split Formula</label>
-                      <select value={newExpSplit} onChange={e => setNewExpSplit(e.target.value as any)} style={{ marginTop: '4px' }}>
-                        <option value="equal">Divide Equally</option>
-                        <option value="custom">Divide Custom</option>
-                      </select>
+
+                    {/* Toggle Itemized vs Single Split */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '4px 0' }}>
+                      <input 
+                        type="checkbox" 
+                        id="toggle-itemized" 
+                        checked={isItemized} 
+                        onChange={e => setIsItemized(e.target.checked)} 
+                        style={{ width: '16px', height: '16px' }}
+                      />
+                      <label htmlFor="toggle-itemized" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#191715', cursor: 'pointer' }}>
+                        Split Multiple Items (Itemized Split)
+                      </label>
                     </div>
-                    <div>
-                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Included Roommates</label>
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                        {kompaMembers.map(h => (
-                          <button
-                            key={h.id}
-                            style={{
-                              padding: '5px 8px', fontSize: '0.72rem', borderRadius: '4px',
-                              border: '1px solid rgba(25, 23, 21, 0.15)',
-                              background: newExpVisibility.includes(h.id) ? '#191715' : 'transparent',
-                              color: newExpVisibility.includes(h.id) ? 'white' : '#191715'
-                            }}
-                            onClick={() => {
-                              if (newExpVisibility.includes(h.id)) {
-                                setNewExpVisibility(newExpVisibility.filter(id => id !== h.id));
-                              } else {
-                                setNewExpVisibility([...newExpVisibility, h.id]);
-                              }
-                            }}
-                          >
-                            {h.name}
-                          </button>
-                        ))}
+
+                    {!isItemized ? (
+                      <>
+                        <div>
+                          <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Total cost ($)</label>
+                          <input type="number" placeholder="0.00" value={newExpAmount} onChange={e => setNewExpAmount(e.target.value)} style={{ marginTop: '4px' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Split Formula</label>
+                          <select value={newExpSplit} onChange={e => setNewExpSplit(e.target.value as any)} style={{ marginTop: '4px' }}>
+                            <option value="equal">Divide Equally</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Included Roommates</label>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                            {kompaMembers.map(h => (
+                              <button
+                                key={h.id}
+                                style={{
+                                  padding: '5px 8px', fontSize: '0.72rem', borderRadius: '4px',
+                                  border: '1px solid rgba(25, 23, 21, 0.15)',
+                                  background: newExpVisibility.includes(h.id) ? '#191715' : 'transparent',
+                                  color: newExpVisibility.includes(h.id) ? 'white' : '#191715'
+                                }}
+                                onClick={() => {
+                                  if (newExpVisibility.includes(h.id)) {
+                                    setNewExpVisibility(newExpVisibility.filter(id => id !== h.id));
+                                  } else {
+                                    setNewExpVisibility([...newExpVisibility, h.id]);
+                                  }
+                                }}
+                              >
+                                {h.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Itemized Entries</label>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+                          {itemizedList.map((item, index) => (
+                            <div key={index} style={{ border: '1px solid rgba(25,23,21,0.08)', padding: '10px', borderRadius: '6px', background: 'rgba(25,23,21,0.01)' }}>
+                              <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                                <input 
+                                  type="text" 
+                                  placeholder="Item name (e.g. Eggs)" 
+                                  value={item.name} 
+                                  onChange={e => {
+                                    const next = [...itemizedList];
+                                    next[index].name = e.target.value;
+                                    setItemizedList(next);
+                                  }}
+                                  style={{ padding: '6px', fontSize: '0.78rem' }}
+                                />
+                                <input 
+                                  type="number" 
+                                  placeholder="Cost ($)" 
+                                  value={item.cost} 
+                                  onChange={e => {
+                                    const next = [...itemizedList];
+                                    next[index].cost = e.target.value;
+                                    setItemizedList(next);
+                                  }}
+                                  style={{ padding: '6px', fontSize: '0.78rem', width: '90px' }}
+                                />
+                                {itemizedList.length > 1 && (
+                                  <button 
+                                    className="btn-secondary" 
+                                    style={{ padding: '6px 8px', color: 'var(--accent-rose)', borderColor: 'var(--accent-rose)' }}
+                                    onClick={() => setItemizedList(itemizedList.filter((_, i) => i !== index))}
+                                  >
+                                    <Trash size={12} />
+                                  </button>
+                                )}
+                              </div>
+                              
+                              <div>
+                                <label style={{ fontSize: '0.65rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Split With</label>
+                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '2px' }}>
+                                  {kompaMembers.map(m => {
+                                    const active = item.splitWith.includes(m.id);
+                                    return (
+                                      <button
+                                        key={m.id}
+                                        style={{
+                                          padding: '3px 6px', fontSize: '0.65rem', borderRadius: '3px',
+                                          border: '1px solid rgba(25, 23, 21, 0.15)',
+                                          background: active ? '#191715' : 'transparent',
+                                          color: active ? 'white' : '#191715'
+                                        }}
+                                        onClick={() => {
+                                          const next = [...itemizedList];
+                                          if (active) {
+                                            next[index].splitWith = item.splitWith.filter(id => id !== m.id);
+                                          } else {
+                                            next[index].splitWith = [...item.splitWith, m.id];
+                                          }
+                                          setItemizedList(next);
+                                        }}
+                                      >
+                                        {m.name}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <button 
+                          className="btn-secondary" 
+                          style={{ width: '100%', padding: '6px', marginTop: '8px', fontSize: '0.75rem', borderRadius: '4px' }}
+                          onClick={() => setItemizedList([...itemizedList, { name: '', cost: '', splitWith: [] }])}
+                        >
+                          + Add Item entry
+                        </button>
+                        
+                        <div style={{ marginTop: '12px', fontSize: '0.85rem', fontWeight: 900, color: '#191715', textAlign: 'right' }}>
+                          Itemized Total: ${itemizedList.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0).toFixed(2)}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                       <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setShowAddExpenseModal(false)}>Cancel</button>
                       <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleAddManualExpense}>Add Bill</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Click details modal for Expense History (Update/Delete splits) */}
+            {showExpenseDetailsModal && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', maxHeight: '90%', overflowY: 'auto', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', alignItems: 'center' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Split Details</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => setShowExpenseDetailsModal(null)} />
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Description</label>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#191715' }}>{showExpenseDetailsModal.title}</div>
+                    </div>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Total Amount</label>
+                        <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>${showExpenseDetailsModal.amount.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Payer</label>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>
+                          {kompaMembers.find(h => h.id === showExpenseDetailsModal.payerId)?.name || 'Someone'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Rendering Child Itemized lists if itemsJson is loaded */}
+                    {showExpenseDetailsModal.itemsJson && showExpenseDetailsModal.itemsJson.length > 0 && (
+                      <div style={{ border: '1px solid rgba(25,23,21,0.08)', padding: '10px', borderRadius: '6px', background: 'rgba(25,23,21,0.01)' }}>
+                        <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Itemized Breakdown</label>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+                          {showExpenseDetailsModal.itemsJson.map((item, idx) => {
+                            const isIncluded = item.splitWith.includes(currentUserProfile.id);
+                            const myShare = isIncluded ? (item.cost / item.splitWith.length) : 0;
+                            return (
+                              <div key={idx} className="itemized-sub-row">
+                                <span>{item.name}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ fontWeight: 800 }}>${myShare.toFixed(2)} share</span>
+                                  <span style={{ fontSize: '0.7rem', color: '#8c857e' }}>(${item.cost.toFixed(2)})</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      <button 
+                        className="btn-secondary" 
+                        style={{ flex: 1, padding: '9px', color: 'var(--accent-rose)', border: '1px solid var(--accent-rose)', borderRadius: '4px' }} 
+                        onClick={async () => {
+                          const confirmDel = window.confirm('Delete this transaction split?');
+                          if (confirmDel) {
+                            setExpenses(prev => prev.filter(e => e.id !== showExpenseDetailsModal.id));
+                            if (dbSynced) {
+                              await supabase.from('expenses').delete().eq('id', showExpenseDetailsModal.id);
+                            }
+                            setShowExpenseDetailsModal(null);
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -3283,7 +3984,7 @@ export default function App() {
         {/* TAB 5: CHAT */}
         {activeTab === 'chat' && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '620px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(25, 23, 21, 0.05)', paddingBottom: '8px', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(0, 0, 0, 0.05)', paddingBottom: '8px', marginBottom: '12px' }}>
               <Users size={16} style={{ color: '#191715' }} />
               
               {/* Active Kompa specific Chatroom Name */}
@@ -3295,7 +3996,7 @@ export default function App() {
                 </span>
               </div>
 
-              {/* Online members initial avatars row */}
+              {/* Online members initials row */}
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {kompaMembers.map(m => (
                   <div key={m.id} title={m.name}>

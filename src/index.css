@@ -772,4 +772,49 @@ button {
   margin-top: 1px;
 }
 
+/* Wishlist Status Badges */
+.wishlist-status-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  width: fit-content;
+  margin-top: 4px;
+  display: inline-block;
+}
+
+.wishlist-status-pill.want {
+  background: rgba(217, 119, 6, 0.08);
+  color: #d97706;
+  border: 1px solid rgba(217, 119, 6, 0.15);
+}
+
+.wishlist-status-pill.waiting {
+  background: rgba(124, 58, 237, 0.08);
+  color: #7c3aed;
+  border: 1px solid rgba(124, 58, 237, 0.15);
+}
+
+.wishlist-status-pill.bought {
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+/* Itemized sub-item rows */
+.itemized-sub-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(25, 23, 21, 0.05);
+}
+
+.itemized-sub-row:last-child {
+  border-bottom: none;
+}
+
+
 
