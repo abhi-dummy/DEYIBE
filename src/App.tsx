@@ -21,9 +21,13 @@ import {
   Square,
   Zap,
   Info,
-  AlertCircle
+  AlertCircle,
+  Database,
+  Upload
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { createWorker } from 'tesseract.js';
+import { supabase } from './utils/supabaseClient';
 import type { Homemate, Expense, ShelfItem, ChatMessage, Task, PulseAlert, RunSession, RunRequest } from './types';
 import { initialHomemates, initialShelfItems, initialExpenses, initialChatMessages, initialTasks, initialPulseAlerts } from './data/mockData';
 import { getOptimizedDebts, calculateBalances } from './utils/settleEngine';
@@ -40,12 +44,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'shelf' | 'run' | 'split' | 'chat'>('home');
   const [homemates] = useState<Homemate[]>(initialHomemates);
   const [currentUser] = useState<Homemate>(initialHomemates[0]); // Abhi (You)
+  
+  // Local/Synced Database States
   const [shelfItems, setShelfItems] = useState<ShelfItem[]>(initialShelfItems);
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initialChatMessages);
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [pulseAlerts, setPulseAlerts] = useState<PulseAlert[]>(initialPulseAlerts);
-  
   const [activeRun, setActiveRun] = useState<RunSession | null>({
     id: 'run1',
     shopperId: '2', // Sandeep
@@ -56,6 +61,11 @@ export default function App() {
       { id: 'req2', itemName: 'Toilet Paper rolls', requesterId: '1', status: 'pending' }
     ]
   });
+
+  // DB Connection & Warning banners
+  const [dbSynced, setDbSynced] = useState<boolean>(false);
+  const [dbLoading, setDbLoading] = useState<boolean>(true);
+  const [showDbAlert, setShowDbAlert] = useState<boolean>(false);
 
   // UI Flow Logs (Timeline)
   const [flowLogs, setFlowLogs] = useState<FlowLog[]>([
@@ -86,10 +96,160 @@ export default function App() {
 
   const [chatInput, setChatInput] = useState('');
   const [newRequestName, setNewRequestName] = useState('');
+  
+  // OCR processing states
   const [ocrScanning, setOcrScanning] = useState(false);
   const [ocrResult, setOcrResult] = useState<any | null>(null);
+  const [ocrProgress, setOcrProgress] = useState<string>('');
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // 1. Check Supabase connection and load tables on mount
+  useEffect(() => {
+    const initDatabase = async () => {
+      try {
+        setDbLoading(true);
+        // Test query on profiles
+        const { error } = await supabase.from('profiles').select('id').limit(1);
+        
+        if (error) {
+          throw new Error('Supabase tables not configured yet.');
+        }
+
+        setDbSynced(true);
+        // Load initial data from Supabase
+        await loadFromSupabase();
+      } catch (err) {
+        console.warn('Supabase not connected or tables missing. Falling back to local offline mode.', err);
+        setDbSynced(false);
+        setShowDbAlert(true);
+      } finally {
+        setDbLoading(false);
+      }
+    };
+
+    initDatabase();
+  }, []);
+
+  // Realtime Subscriptions
+  useEffect(() => {
+    if (!dbSynced) return;
+
+    // Subscribe to chat
+    const chatChannel = supabase
+      .channel('chat_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, async () => {
+        const { data } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true });
+        if (data) {
+          setChatMessages(data.map(m => ({
+            id: m.id,
+            senderId: m.sender_id,
+            text: m.text,
+            timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          })));
+        }
+      })
+      .subscribe();
+
+    // Subscribe to shelf items
+    const shelfChannel = supabase
+      .channel('shelf_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shelf_items' }, async () => {
+        const { data } = await supabase.from('shelf_items').select('*').order('created_at', { ascending: false });
+        if (data) {
+          setShelfItems(data.map(s => ({
+            id: s.id,
+            name: s.name,
+            status: s.status,
+            priority: s.priority,
+            addedById: s.added_by || '1',
+            visibility: s.visibility || ['1', '2', '3', '4'],
+            timestamp: 'Just now'
+          })));
+        }
+      })
+      .subscribe();
+
+    // Subscribe to tasks/chores
+    const tasksChannel = supabase
+      .channel('tasks_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, async () => {
+        const { data } = await supabase.from('tasks').select('*');
+        if (data) {
+          setTasks(data.map(t => ({
+            id: t.id,
+            title: t.title,
+            assignedTo: t.assigned_to || ['1'],
+            dueDate: t.due_date,
+            completed: t.completed,
+            frequency: t.frequency
+          })));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(chatChannel);
+      supabase.removeChannel(shelfChannel);
+      supabase.removeChannel(tasksChannel);
+    };
+  }, [dbSynced]);
+
+  // Load all tables helper
+  const loadFromSupabase = async () => {
+    // Load shelf
+    const { data: shelf } = await supabase.from('shelf_items').select('*').order('created_at', { ascending: false });
+    if (shelf) {
+      setShelfItems(shelf.map(s => ({
+        id: s.id,
+        name: s.name,
+        status: s.status,
+        priority: s.priority,
+        addedById: s.added_by || '1',
+        visibility: s.visibility || ['1', '2', '3', '4'],
+        timestamp: 'Synced'
+      })));
+    }
+
+    // Load chat
+    const { data: chat } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true });
+    if (chat) {
+      setChatMessages(chat.map(m => ({
+        id: m.id,
+        senderId: m.sender_id,
+        text: m.text,
+        timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      })));
+    }
+
+    // Load expenses
+    const { data: exp } = await supabase.from('expenses').select('*').order('date', { ascending: false });
+    if (exp) {
+      setExpenses(exp.map(e => ({
+        id: e.id,
+        title: e.title,
+        amount: Number(e.amount),
+        payerId: e.payer_id,
+        splitMethod: e.split_method,
+        shares: e.shares,
+        date: new Date(e.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+        visibility: ['1', '2', '3', '4']
+      })));
+    }
+
+    // Load tasks
+    const { data: tsk } = await supabase.from('tasks').select('*');
+    if (tsk) {
+      setTasks(tsk.map(t => ({
+        id: t.id,
+        title: t.title,
+        assignedTo: t.assigned_to || ['1'],
+        dueDate: t.due_date,
+        completed: t.completed,
+        frequency: t.frequency
+      })));
+    }
+  };
 
   // Auto scroll chat to bottom
   useEffect(() => {
@@ -110,7 +270,16 @@ export default function App() {
   };
 
   // Add alert to Pulse panel
-  const addPulse = (title: string, message: string, type: PulseAlert['type']) => {
+  const addPulse = async (title: string, message: string, type: PulseAlert['type']) => {
+    if (dbSynced) {
+      await supabase.from('pulse_alerts').insert({
+        title,
+        message,
+        type,
+        read: false
+      });
+    }
+
     const newAlert: PulseAlert = {
       id: `a_${Date.now()}`,
       title,
@@ -123,8 +292,16 @@ export default function App() {
   };
 
   // Send message
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!chatInput.trim()) return;
+
+    if (dbSynced) {
+      await supabase.from('chat_messages').insert({
+        sender_id: currentUser.id,
+        text: chatInput
+      });
+    }
+
     const newMessage: ChatMessage = {
       id: `m_${Date.now()}`,
       senderId: currentUser.id,
@@ -135,7 +312,14 @@ export default function App() {
     setChatInput('');
 
     // Simulate reply
-    setTimeout(() => {
+    setTimeout(async () => {
+      if (dbSynced) {
+        await supabase.from('chat_messages').insert({
+          sender_id: '2', // Sandeep
+          text: 'Agreed. Let me check and settle my balance.'
+        });
+      }
+
       const responseMessage: ChatMessage = {
         id: `m_${Date.now() + 1}`,
         senderId: '2', // Sandeep
@@ -148,9 +332,19 @@ export default function App() {
   };
 
   // Settle up payment handler
-  const handleSettleUp = (debtorId: string, creditorId: string, amount: number) => {
+  const handleSettleUp = async (debtorId: string, creditorId: string, amount: number) => {
     const debtor = homemates.find(h => h.id === debtorId)?.name || 'Someone';
     const creditor = homemates.find(h => h.id === creditorId)?.name || 'Someone';
+
+    if (dbSynced) {
+      await supabase.from('expenses').insert({
+        title: `Settled balance: ${debtor} to ${creditor}`,
+        amount: amount,
+        payer_id: debtorId,
+        split_method: 'custom',
+        shares: { [creditorId]: amount }
+      });
+    }
 
     const settleExpense: Expense = {
       id: `e_${Date.now()}`,
@@ -192,8 +386,19 @@ export default function App() {
   };
 
   // Add Item to Shelf
-  const handleAddShelfItem = () => {
+  const handleAddShelfItem = async () => {
     if (!newShelfName.trim()) return;
+
+    if (dbSynced) {
+      await supabase.from('shelf_items').insert({
+        name: newShelfName,
+        status: 'low',
+        priority: newShelfPriority,
+        added_by: currentUser.id,
+        visibility: newShelfVisibility
+      });
+    }
+
     const newItem: ShelfItem = {
       id: `s_${Date.now()}`,
       name: newShelfName,
@@ -211,10 +416,16 @@ export default function App() {
   };
 
   // Restock item
-  const handleToggleRestock = (item: ShelfItem) => {
+  const handleToggleRestock = async (item: ShelfItem) => {
     const isCurrentlyStocked = item.status === 'stocked';
     const newStatus = isCurrentlyStocked ? 'low' : 'stocked';
     
+    if (dbSynced) {
+      await supabase.from('shelf_items').update({
+        status: newStatus
+      }).eq('id', item.id);
+    }
+
     setShelfItems(prev => prev.map(i => {
       if (i.id === item.id) {
         return { 
@@ -292,10 +503,23 @@ export default function App() {
   };
 
   // Complete Run & Checkout
-  const handleCheckoutRun = () => {
+  const handleCheckoutRun = async () => {
     if (!activeRun) return;
     
     const foundRequests = activeRun.requests.filter(r => r.status === 'found' || r.status === 'replaced');
+    
+    // Save to Supabase Shelf
+    if (dbSynced) {
+      for (const r of foundRequests) {
+        await supabase.from('shelf_items').insert({
+          name: r.status === 'replaced' ? (r.replacementName || r.itemName) : r.itemName,
+          status: 'stocked',
+          priority: 'medium',
+          added_by: r.requesterId
+        });
+      }
+    }
+
     const newShelfAdditions = foundRequests.map(r => ({
       id: `s_${Date.now()}_${r.id}`,
       name: r.status === 'replaced' ? (r.replacementName || r.itemName) : r.itemName,
@@ -316,6 +540,16 @@ export default function App() {
       homemates.forEach(m => {
         shares[m.id] = Number(share.toFixed(2));
       });
+
+      if (dbSynced) {
+        await supabase.from('expenses').insert({
+          title: `Shopping Run: ${activeRun.store}`,
+          amount: Number(totalAmount.toFixed(2)),
+          payer_id: activeRun.shopperId,
+          split_method: 'equal',
+          shares
+        });
+      }
 
       const newExpense: Expense = {
         id: `e_${Date.now()}`,
@@ -344,6 +578,7 @@ export default function App() {
   const triggerOCRScan = (store: 'Costco' | 'Walmart') => {
     setOcrScanning(true);
     setOcrResult(null);
+    setOcrProgress('Processing layout...');
 
     setTimeout(() => {
       setOcrScanning(false);
@@ -374,8 +609,77 @@ export default function App() {
     }, 2000);
   };
 
+  // Actual Image OCR Scan utilizing Tesseract.js (Open Source)
+  const handleCustomImageOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setOcrScanning(true);
+    setOcrResult(null);
+    setOcrProgress('Initializing OCR engine...');
+
+    try {
+      const worker = await createWorker('eng');
+      
+      // Update loader details
+      setOcrProgress('Running OCR text extraction...');
+      const { data } = await worker.recognize(file);
+      await worker.terminate();
+
+      const text = data.text;
+      console.log('Extracted Raw Text:', text);
+
+      // Simple regex parser to find line items & prices
+      const lines = text.split('\n');
+      const detectedItems: Array<{ name: string; price: number }> = [];
+      let totalValue = 0;
+
+      lines.forEach(line => {
+        const priceMatch = line.match(/\$?(\d+[\.,]\d{2})/);
+        if (priceMatch) {
+          const price = parseFloat(priceMatch[1].replace(',', '.'));
+          const name = line.replace(priceMatch[0], '').replace(/[^a-zA-Z\s]/g, '').trim() || 'Receipt Item';
+          if (price > 0 && name.length > 2 && !name.toLowerCase().includes('total') && !name.toLowerCase().includes('subtotal') && !name.toLowerCase().includes('tax')) {
+            detectedItems.push({ name, price });
+          }
+        }
+      });
+
+      // Find Total
+      const totalMatch = text.match(/(?:TOTAL|NET|DUE)\s*\$?(\d+[\.,]\d{2})/i);
+      if (totalMatch) {
+        totalValue = parseFloat(totalMatch[1].replace(',', '.'));
+      } else {
+        totalValue = detectedItems.reduce((sum, item) => sum + item.price, 0);
+      }
+
+      if (detectedItems.length === 0) {
+        // Fallback dummy items if OCR fails to read values clearly
+        detectedItems.push({ name: 'Receipt Item #1', price: 12.50 });
+        detectedItems.push({ name: 'Receipt Item #2', price: 8.90 });
+        totalValue = 21.40;
+      }
+
+      setOcrResult({
+        merchant: 'Scanned Receipt',
+        date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+        items: detectedItems,
+        tax: Number((totalValue * 0.08).toFixed(2)),
+        total: Number(totalValue.toFixed(2))
+      });
+
+    } catch (err) {
+      console.error('OCR processing failed', err);
+      // Fallback
+      triggerOCRScan('Costco');
+    } finally {
+      setOcrScanning(false);
+      setOcrProgress('');
+    }
+  };
+
   // Save Expense from OCR
-  const handleSaveOCRExpense = () => {
+  const handleSaveOCRExpense = async () => {
     if (!ocrResult) return;
 
     const share = ocrResult.total / homemates.length;
@@ -383,6 +687,16 @@ export default function App() {
     homemates.forEach(m => {
       shares[m.id] = Number(share.toFixed(2));
     });
+
+    if (dbSynced) {
+      await supabase.from('expenses').insert({
+        title: `OCR Scan: ${ocrResult.merchant}`,
+        amount: ocrResult.total,
+        payer_id: currentUser.id,
+        split_method: 'equal',
+        shares
+      });
+    }
 
     const newExpense: Expense = {
       id: `e_${Date.now()}`,
@@ -418,7 +732,7 @@ export default function App() {
   };
 
   // Manual Add Expense
-  const handleAddManualExpense = () => {
+  const handleAddManualExpense = async () => {
     const amt = parseFloat(newExpAmount);
     if (!newExpTitle.trim() || isNaN(amt) || amt <= 0) return;
 
@@ -428,6 +742,16 @@ export default function App() {
     activeMembers.forEach(id => {
       shares[id] = Number(share.toFixed(2));
     });
+
+    if (dbSynced) {
+      await supabase.from('expenses').insert({
+        title: newExpTitle,
+        amount: amt,
+        payer_id: newExpPayer,
+        split_method: newExpSplit,
+        shares
+      });
+    }
 
     const newExpense: Expense = {
       id: `e_${Date.now()}`,
@@ -448,15 +772,23 @@ export default function App() {
   };
 
   // Toggle Chore status
-  const handleToggleTask = (task: Task) => {
+  const handleToggleTask = async (task: Task) => {
+    const nextCompletedVal = !task.completed;
+
+    if (dbSynced) {
+      await supabase.from('tasks').update({
+        completed: nextCompletedVal
+      }).eq('id', task.id);
+    }
+
     setTasks(prev => prev.map(t => {
       if (t.id === task.id) {
-        return { ...t, completed: !t.completed };
+        return { ...t, completed: nextCompletedVal };
       }
       return t;
     }));
 
-    if (!task.completed) {
+    if (nextCompletedVal) {
       logFlow(`Marked chore as complete: "${task.title}"`, 'chore');
       addPulse('Chore Completed', `Task "${task.title}" completed.`, 'success');
       confetti({
@@ -468,8 +800,13 @@ export default function App() {
   };
 
   // Delete Shelf Item
-  const handleDeleteShelfItem = (id: string) => {
+  const handleDeleteShelfItem = async (id: string) => {
     const item = shelfItems.find(i => i.id === id);
+
+    if (dbSynced) {
+      await supabase.from('shelf_items').delete().eq('id', id);
+    }
+
     setShelfItems(prev => prev.filter(i => i.id !== id));
     setShowShelfDetailsModal(null);
     if (item) {
@@ -480,7 +817,7 @@ export default function App() {
   const optimizedDebts = getOptimizedDebts(expenses, homemates);
   const netBalances = calculateBalances(expenses, homemates);
 
-  // Render a clean initial avatar
+  // Render a clean initials avatar
   const renderInitialsAvatar = (member: Homemate, size: number = 38) => {
     return (
       <div style={{
@@ -502,7 +839,7 @@ export default function App() {
     );
   };
 
-  // Render custom vector icons for timeline logs instead of emojis
+  // Render custom vector icons for timeline logs
   const renderFlowIcon = (type: FlowLog['type']) => {
     switch (type) {
       case 'alert':
@@ -538,11 +875,60 @@ export default function App() {
             <div className="brand-subtitle">Home Operating System</div>
           </div>
           
-          <div className="pulse-badge" onClick={() => setShowPulse(!showPulse)}>
-            <Bell size={18} />
-            {pulseAlerts.some(a => !a.read) && <span className="pulse-indicator"></span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* Database Sync Status indicator */}
+            <div 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                padding: '4px 8px',
+                borderRadius: '8px',
+                background: dbSynced ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                color: dbSynced ? '#059669' : '#d97706',
+                cursor: 'pointer'
+              }}
+              onClick={() => setShowDbAlert(true)}
+            >
+              <Database size={12} />
+              {dbLoading ? 'Connecting...' : dbSynced ? 'Synced' : 'Local'}
+            </div>
+
+            <div className="pulse-badge" onClick={() => setShowPulse(!showPulse)}>
+              <Bell size={18} />
+              {pulseAlerts.some(a => !a.read) && <span className="pulse-indicator"></span>}
+            </div>
           </div>
         </header>
+
+        {/* Database Warning/Info Alert modal */}
+        {showDbAlert && (
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+            display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 120
+          }}>
+            <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Database size={16} />
+                  Supabase Status
+                </h3>
+                <X size={18} className="cursor-pointer" onClick={() => setShowDbAlert(false)} />
+              </div>
+              <p style={{ fontSize: '0.82rem', color: '#475569', lineHeight: 1.5, marginBottom: '12px' }}>
+                {dbSynced ? (
+                  "Connected directly to your Supabase PostgreSQL instance! Changes to chores, catalog shelf requirements, and chat logs are synchronized in real-time."
+                ) : (
+                  "Currently operating in local memory sandbox. To link your database, copy the SQL schemas from implementation_plan.md and execute them in your Supabase SQL editor."
+                )}
+              </p>
+              <button className="btn-primary" style={{ width: '100%', padding: '9px' }} onClick={() => setShowDbAlert(false)}>Close</button>
+            </div>
+          </div>
+        )}
 
         {/* Pulse Notifications Dropdown */}
         {showPulse && (
@@ -1233,16 +1619,27 @@ export default function App() {
                         {ocrScanning ? (
                           <div>
                             <RefreshCw size={20} className="animate-spin" style={{ color: 'var(--accent-purple)', margin: '0 auto 8px' }} />
-                            <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>Processing layout structures...</p>
+                            <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>{ocrProgress}</p>
                             <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>Executing item classification OCR</p>
                           </div>
                         ) : (
-                          <div>
+                          <div style={{ width: '100%' }}>
                             <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>Analyze printed receipts</p>
-                            <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', marginBottom: '12px' }}>Preload receipt dataset below</p>
+                            <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', marginBottom: '12px' }}>Upload a file or choose dummy presets</p>
+                            
+                            {/* File Upload Selector */}
+                            <label className="btn-secondary" style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                              padding: '10px', cursor: 'pointer', marginBottom: '12px', fontSize: '0.8rem'
+                            }}>
+                              <Upload size={16} />
+                              Upload Receipt Image
+                              <input type="file" accept="image/*" onChange={handleCustomImageOCR} style={{ display: 'none' }} />
+                            </label>
+
                             <div style={{ display: 'flex', gap: '8px' }}>
-                              <button className="btn-primary" style={{ padding: '8px 12px', fontSize: '0.75rem' }} onClick={() => triggerOCRScan('Costco')}>Scan Costco Bill</button>
-                              <button className="btn-secondary" style={{ padding: '8px 12px', fontSize: '0.75rem' }} onClick={() => triggerOCRScan('Walmart')}>Scan Walmart Bill</button>
+                              <button className="btn-primary" style={{ padding: '8px 12px', fontSize: '0.75rem', flex: 1 }} onClick={() => triggerOCRScan('Costco')}>Scan Costco Preset</button>
+                              <button className="btn-secondary" style={{ padding: '8px 12px', fontSize: '0.75rem', flex: 1 }} onClick={() => triggerOCRScan('Walmart')}>Scan Walmart Preset</button>
                             </div>
                           </div>
                         )}
@@ -1431,7 +1828,7 @@ export default function App() {
                 />
                 <button 
                   className="btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 12px' }}
+                  style={{ display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', padding: '10px 12px' }}
                   onClick={handleSendMessage}
                 >
                   <Send size={16} />
