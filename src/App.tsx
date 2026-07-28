@@ -50,6 +50,26 @@ interface FlowLog {
   type: 'alert' | 'run' | 'chore' | 'split' | 'stocked' | 'system';
 }
 
+// Background service worker ready native push notification helper
+const triggerPushNotification = async (title: string, body: string) => {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg) {
+        reg.showNotification(title, {
+          body,
+          icon: '/vite.svg'
+        });
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn('Service worker notification failed, falling back to window Notification:', err);
+  }
+  new Notification(title, { body });
+};
+
 export default function App() {
   // SaaS Landing Page / Auth Switcher State
   const [viewLanding, setViewLanding] = useState<boolean>(true);
@@ -202,6 +222,40 @@ export default function App() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // V8: Scroll to bottom of chat when opening tab or new message arrives
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, [activeTab, chatMessages.length]);
+
+  // V8: Persist active Kompa selection to localStorage on change
+  useEffect(() => {
+    if (activeKompa) {
+      localStorage.setItem('deyibe_active_kompa_id', activeKompa.id);
+    }
+  }, [activeKompa]);
+
+  // V8: Register inline Blob Service Worker for background/locked notifications
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      const swCode = `
+        self.addEventListener('install', e => self.skipWaiting());
+        self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+        self.addEventListener('push', e => {
+          const data = e.data.json();
+          self.registration.showNotification(data.title, { body: data.body });
+        });
+      `;
+      const blob = new Blob([swCode], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      navigator.serviceWorker.register(url).catch(err => console.warn('Service worker failed:', err));
+    }
+  }, []);
+
+
   // Sync activeTab to ref
   useEffect(() => {
     activeTabRef.current = activeTab;
@@ -321,9 +375,14 @@ export default function App() {
         }));
         setJoinedKompas(kompaList);
         
-        // Retain active Kompa if valid, else pick first
-        const isCurrentActiveValid = activeKompa && kompaList.some(k => k.id === activeKompa.id);
-        if (!isCurrentActiveValid) {
+        // Hydrate active Kompa from localStorage if valid, else pick first
+        const savedActiveId = localStorage.getItem('deyibe_active_kompa_id');
+        const isSavedValid = savedActiveId && kompaList.some(k => k.id === savedActiveId);
+        
+        if (isSavedValid) {
+          const savedKompa = kompaList.find(k => k.id === savedActiveId);
+          if (savedKompa) setActiveKompa(savedKompa);
+        } else {
           setActiveKompa(kompaList[0]);
         }
         setDbSynced(true);
@@ -452,6 +511,13 @@ export default function App() {
           type: p.type,
           timestamp: 'Synced',
           read: p.read
+        })));
+
+        setFlowLogs(pulses.map((p: any) => ({
+          id: p.id,
+          text: p.message,
+          time: new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(p.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+          type: p.type === 'success' ? 'stocked' : p.type === 'warning' ? 'alert' : 'system'
         })));
       }
 
@@ -701,11 +767,7 @@ export default function App() {
               const requesterName = kompaMembers.find(h => h.id === req.requester_id)?.name || 'Roommate';
               
               // Trigger Native Push Notification
-              if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification('New Kompa Request', {
-                  body: `${requesterName} added "${req.item_name}" to your run list!`
-                });
-              }
+              triggerPushNotification('New Kompa Request', `${requesterName} added "${req.item_name}" to your run list!`);
 
               // Fire local alerts
               addPulse('New Request Added', `${requesterName} added "${req.item_name}" to your run list.`, 'info');
@@ -723,11 +785,7 @@ export default function App() {
         const alert = payload.new;
         if (alert) {
           // Fire Native Browser Notification if active and not created by current user
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(alert.title, {
-              body: alert.message
-            });
-          }
+          triggerPushNotification(alert.title, alert.message);
         }
         loadKompaData();
       })
@@ -1387,11 +1445,7 @@ export default function App() {
       setChatMessages(prev => [...prev, newMessage]);
 
       // 3. Fire local system push notification
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(`${activeKompa.name} Kompa Run`, {
-          body: text
-        });
-      }
+      triggerPushNotification(`${activeKompa.name} Kompa Run`, text);
 
       // 4. Log timeline flow
       logFlow(`Sent Run Notification alert to ${activeKompa.name} Kompa`, 'run');
@@ -1714,18 +1768,39 @@ export default function App() {
     const itemizedListItems = ocrResult.items.map((item: any) => ({
       name: item.name,
       cost: item.price,
-      splitWith: kompaMembers.map(m => m.id)
+      splitWith: item.splitWith && item.splitWith.length > 0 ? item.splitWith : kompaMembers.map(m => m.id)
     }));
 
+    // Calculate shares dynamically
     const shares: Record<string, number> = {};
     kompaMembers.forEach(m => {
-      shares[m.id] = Number((ocrResult.total / kompaMembers.length).toFixed(2));
+      shares[m.id] = 0;
     });
+
+    itemizedListItems.forEach((item: any) => {
+      const share = item.cost / item.splitWith.length;
+      item.splitWith.forEach((id: string) => {
+        if (shares[id] !== undefined) {
+          shares[id] += Number(share.toFixed(2));
+        }
+      });
+    });
+
+    // Add tax proportional share to each person!
+    const subtotal = itemizedListItems.reduce((sum: number, item: any) => sum + item.cost, 0);
+    if (ocrResult.tax > 0 && subtotal > 0) {
+      const taxPct = ocrResult.tax / subtotal;
+      Object.keys(shares).forEach(id => {
+        shares[id] = Number((shares[id] * (1 + taxPct)).toFixed(2));
+      });
+    }
+
+    const finalTotal = Object.values(shares).reduce((sum, val) => sum + val, 0);
 
     const newExpense: Expense = {
       id: `e_${Date.now()}`,
       title: `OCR Scan: ${ocrResult.merchant}`,
-      amount: ocrResult.total,
+      amount: Number(finalTotal.toFixed(2)),
       payerId: currentUserProfile.id,
       splitMethod: 'custom',
       shares,
@@ -1742,7 +1817,7 @@ export default function App() {
       safeDbWrite(() => supabase.from('expenses').insert({
         kompa_id: activeKompa.id,
         title: `OCR Scan: ${ocrResult.merchant}`,
-        amount: ocrResult.total,
+        amount: Number(finalTotal.toFixed(2)),
         payer_id: currentUserProfile.id,
         split_method: 'custom',
         shares,
@@ -4232,18 +4307,112 @@ export default function App() {
                         <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>${ocrResult.total.toFixed(2)}</span>
                       </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#8c857e' }}>Identified Items</span>
-                        {ocrResult.items.map((item: any, idx: number) => (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#191715' }}>
-                            <span>{item.name}</span>
-                            <span style={{ fontWeight: 700 }}>${item.price.toFixed(2)}</span>
-                          </div>
-                        ))}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#8c857e', borderTop: '1px solid rgba(25,23,21,0.03)', paddingTop: '4px' }}>
-                          <span>Associated Tax</span>
-                          <span>${ocrResult.tax.toFixed(2)}</span>
-                        </div>
+                      {/* V8 Interactive OCR item level roommate assign editor */}
+                      <span style={{ fontSize: '0.7rem', fontWeight: 750, textTransform: 'uppercase', color: '#8c857e' }}>Extracted Scans & Splits</span>
+                      
+                      <div className="ocr-editor-list">
+                        {ocrResult.items.map((item: any, idx: number) => {
+                          const itemSplits = item.splitWith || kompaMembers.map(m => m.id);
+                          return (
+                            <div key={idx} className="ocr-editor-row">
+                              <div className="ocr-editor-inputs">
+                                <input 
+                                  type="text" 
+                                  value={item.name} 
+                                  onChange={e => {
+                                    const next = {...ocrResult};
+                                    next.items[idx].name = e.target.value;
+                                    setOcrResult(next);
+                                  }}
+                                  style={{ padding: '4px', fontSize: '0.78rem', flex: 1 }}
+                                />
+                                <input 
+                                  type="number" 
+                                  value={item.price} 
+                                  onChange={e => {
+                                    const next = {...ocrResult};
+                                    next.items[idx].price = parseFloat(e.target.value) || 0;
+                                    const subtotal = next.items.reduce((sum: number, it: any) => sum + it.price, 0);
+                                    next.total = Number((subtotal + next.tax).toFixed(2));
+                                    setOcrResult(next);
+                                  }}
+                                  style={{ padding: '4px', fontSize: '0.78rem', width: '70px' }}
+                                />
+                                <button 
+                                  className="btn-secondary" 
+                                  style={{ padding: '4px 6px', color: 'var(--accent-rose)', borderColor: 'var(--accent-rose)', borderRadius: '4px' }}
+                                  onClick={() => {
+                                    const next = {...ocrResult};
+                                    next.items = next.items.filter((_: any, i: number) => i !== idx);
+                                    const subtotal = next.items.reduce((sum: number, it: any) => sum + it.price, 0);
+                                    next.total = Number((subtotal + next.tax).toFixed(2));
+                                    setOcrResult(next);
+                                  }}
+                                >
+                                  <Trash size={12} />
+                                </button>
+                              </div>
+
+                              <div className="ocr-editor-roommates">
+                                <span style={{ fontSize: '0.62rem', color: '#8c857e', fontWeight: 700, marginRight: '4px' }}>SPLIT:</span>
+                                {kompaMembers.map(m => {
+                                  const active = itemSplits.includes(m.id);
+                                  return (
+                                    <button
+                                      key={m.id}
+                                      style={{
+                                        padding: '2px 5px', fontSize: '0.62rem', borderRadius: '3px',
+                                        border: '1px solid rgba(25,23,21,0.12)',
+                                        background: active ? '#191715' : 'transparent',
+                                        color: active ? 'white' : '#191715'
+                                      }}
+                                      onClick={() => {
+                                        const next = {...ocrResult};
+                                        const currentSplits = next.items[idx].splitWith || kompaMembers.map(h => h.id);
+                                        if (currentSplits.includes(m.id)) {
+                                          next.items[idx].splitWith = currentSplits.filter((id: string) => id !== m.id);
+                                        } else {
+                                          next.items[idx].splitWith = [...currentSplits, m.id];
+                                        }
+                                        setOcrResult(next);
+                                      }}
+                                    >
+                                      {m.name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <button 
+                        className="btn-secondary" 
+                        style={{ width: '100%', padding: '6px', fontSize: '0.75rem', borderRadius: '4px', marginTop: '4px' }}
+                        onClick={() => {
+                          const next = {...ocrResult};
+                          next.items.push({ name: 'New Item', price: 0.00, quantity: 1, splitWith: kompaMembers.map(m => m.id) });
+                          setOcrResult(next);
+                        }}
+                      >
+                        + Add Item Row
+                      </button>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#8c857e' }}>Tax ($)</span>
+                        <input 
+                          type="number" 
+                          value={ocrResult.tax} 
+                          onChange={e => {
+                            const next = {...ocrResult};
+                            next.tax = parseFloat(e.target.value) || 0;
+                            const subtotal = next.items.reduce((sum: number, it: any) => sum + it.price, 0);
+                            next.total = Number((subtotal + next.tax).toFixed(2));
+                            setOcrResult(next);
+                          }}
+                          style={{ padding: '4px', fontSize: '0.78rem', width: '70px', textAlign: 'right' }}
+                        />
                       </div>
 
                       <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
