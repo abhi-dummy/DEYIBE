@@ -887,10 +887,12 @@ export default function App() {
   };
 
   return (
-    <div className="bg-blobs">
-      <div className="blob blob-1"></div>
-      <div className="blob blob-2"></div>
-      <div className="blob blob-3"></div>
+    <>
+      <div className="bg-blobs">
+        <div className="blob blob-1"></div>
+        <div className="blob blob-2"></div>
+        <div className="blob blob-3"></div>
+      </div>
 
       <div className="app-container">
         
@@ -1892,6 +1894,6 @@ export default function App() {
         </nav>
 
       </div>
-    </div>
+    </>
   );
 }
