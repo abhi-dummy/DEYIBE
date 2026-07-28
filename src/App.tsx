@@ -19,43 +19,53 @@ import {
   Clock,
   CheckSquare,
   Square,
-  Zap
+  Zap,
+  Info,
+  AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { Homemate, Expense, ShelfItem, ChatMessage, Task, PulseAlert, RunSession, RunRequest } from './types';
 import { initialHomemates, initialShelfItems, initialExpenses, initialChatMessages, initialTasks, initialPulseAlerts } from './data/mockData';
 import { getOptimizedDebts, calculateBalances } from './utils/settleEngine';
 
+interface FlowLog {
+  id: string;
+  text: string;
+  time: string;
+  type: 'alert' | 'run' | 'chore' | 'split' | 'stocked' | 'system';
+}
+
 export default function App() {
   // App States
   const [activeTab, setActiveTab] = useState<'home' | 'shelf' | 'run' | 'split' | 'chat'>('home');
   const [homemates] = useState<Homemate[]>(initialHomemates);
-  const [currentUser] = useState<Homemate>(initialHomemates[0]); // Abhi
+  const [currentUser] = useState<Homemate>(initialHomemates[0]); // Abhi (You)
   const [shelfItems, setShelfItems] = useState<ShelfItem[]>(initialShelfItems);
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initialChatMessages);
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [pulseAlerts, setPulseAlerts] = useState<PulseAlert[]>(initialPulseAlerts);
+  
   const [activeRun, setActiveRun] = useState<RunSession | null>({
     id: 'run1',
     shopperId: '2', // Sandeep
     store: 'Costco',
     status: 'active',
     requests: [
-      { id: 'req1', itemName: 'Organic Chicken', requesterId: '4', status: 'searching' },
-      { id: 'req2', itemName: 'Toilet Paper', requesterId: '1', status: 'pending' }
+      { id: 'req1', itemName: 'Organic Chicken Breast', requesterId: '4', status: 'searching' },
+      { id: 'req2', itemName: 'Toilet Paper rolls', requesterId: '1', status: 'pending' }
     ]
   });
 
-  // UI Flow Logs
-  const [flowLogs, setFlowLogs] = useState<Array<{ id: string; text: string; time: string; icon: string }>>([
-    { id: 'f1', text: 'Divya marked Toilet Paper as OUT OF STOCK on Shelf', time: '3 hours ago', icon: '🚨' },
-    { id: 'f2', text: 'Sandeep started a Costco Run', time: '1 hour ago', icon: '🛒' },
-    { id: 'f3', text: 'Abhi (You) completed "Take out the trash" chore', time: '2 hours ago', icon: '🧹' },
-    { id: 'f4', text: 'Sandeep added Wi-Fi expense ($60.00) to Split', time: 'Yesterday', icon: '💸' }
+  // UI Flow Logs (Timeline)
+  const [flowLogs, setFlowLogs] = useState<FlowLog[]>([
+    { id: 'f1', text: 'Divya reported Toilet Paper as OUT OF STOCK on Shelf requirements', time: '3h ago', type: 'alert' },
+    { id: 'f2', text: 'Sandeep initiated a Costco Run session', time: '1h ago', type: 'run' },
+    { id: 'f3', text: 'Abhi completed the "Dispose of kitchen waste" chore', time: '2h ago', type: 'chore' },
+    { id: 'f4', text: 'Sandeep logged High-speed Wi-Fi subscription cost ($60.00) in Split', time: 'Yesterday', type: 'split' }
   ]);
 
-  // Modal / Form States
+  // Modal / Window States
   const [showPulse, setShowPulse] = useState(false);
   const [showAddShelfModal, setShowAddShelfModal] = useState(false);
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
@@ -88,19 +98,19 @@ export default function App() {
     }
   }, [chatMessages, activeTab]);
 
-  // Log a new activity into Flow
-  const logFlow = (text: string, icon: string) => {
-    const newLog = {
+  // Log activity into global House Flow
+  const logFlow = (text: string, type: FlowLog['type']) => {
+    const newLog: FlowLog = {
       id: `f_${Date.now()}`,
       text,
       time: 'Just now',
-      icon
+      type
     };
     setFlowLogs(prev => [newLog, ...prev]);
   };
 
-  // Add notification to Pulse
-  const addPulse = (title: string, message: string, type: 'info' | 'alert' | 'success') => {
+  // Add alert to Pulse panel
+  const addPulse = (title: string, message: string, type: PulseAlert['type']) => {
     const newAlert: PulseAlert = {
       id: `a_${Date.now()}`,
       title,
@@ -112,7 +122,7 @@ export default function App() {
     setPulseAlerts(prev => [newAlert, ...prev]);
   };
 
-  // Handle send message
+  // Send message
   const handleSendMessage = () => {
     if (!chatInput.trim()) return;
     const newMessage: ChatMessage = {
@@ -124,16 +134,16 @@ export default function App() {
     setChatMessages(prev => [...prev, newMessage]);
     setChatInput('');
 
-    // Simulate roommate response in chat
+    // Simulate reply
     setTimeout(() => {
       const responseMessage: ChatMessage = {
         id: `m_${Date.now() + 1}`,
         senderId: '2', // Sandeep
-        text: 'Got it! Just checked that. Let me look.',
+        text: 'Agreed. Let me check and settle my balance.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setChatMessages(prev => [...prev, responseMessage]);
-      addPulse('New Message', 'Sandeep sent a message in Chat', 'info');
+      addPulse('New Message', 'Sandeep replied in chat', 'info');
     }, 1500);
   };
 
@@ -142,14 +152,13 @@ export default function App() {
     const debtor = homemates.find(h => h.id === debtorId)?.name || 'Someone';
     const creditor = homemates.find(h => h.id === creditorId)?.name || 'Someone';
 
-    // Add settle transaction as an expense with negative/adjusted values, or resolve balance directly
     const settleExpense: Expense = {
       id: `e_${Date.now()}`,
-      title: `Settled: ${debtor} paid ${creditor}`,
+      title: `Settled balance: ${debtor} to ${creditor}`,
       amount: amount,
       payerId: debtorId,
       splitMethod: 'custom',
-      shares: { [creditorId]: amount }, // creditor owed this
+      shares: { [creditorId]: amount },
       date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
       visibility: ['1', '2', '3', '4']
     };
@@ -157,20 +166,20 @@ export default function App() {
     setExpenses(prev => [...prev, settleExpense]);
     setShowSettleModal(false);
 
-    // Confetti effect!
+    // Confetti effect
     confetti({
       particleCount: 150,
-      spread: 70,
-      origin: { y: 0.6 }
+      spread: 80,
+      origin: { y: 0.65 }
     });
 
-    logFlow(`${debtor} settled $${amount.toFixed(2)} with ${creditor}`, '💸');
-    addPulse('Debt Settled', `${debtor} paid ${creditor} $${amount.toFixed(2)}.`, 'success');
+    logFlow(`${debtor} settled $${amount.toFixed(2)} balance with ${creditor}`, 'split');
+    addPulse('Account Settled', `${debtor} paid ${creditor} $${amount.toFixed(2)}.`, 'success');
   };
 
-  // Buzz Roommate action
+  // Buzz Roommate
   const handleBuzz = (target: Homemate) => {
-    const text = `⚡ Abhi buzzed ${target.name}: "Hey! Check our active tasks/expenses."`;
+    const text = `System request: Abhi requested response from ${target.name}.`;
     const newMessage: ChatMessage = {
       id: `m_${Date.now()}`,
       senderId: 'system',
@@ -178,8 +187,8 @@ export default function App() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setChatMessages(prev => [...prev, newMessage]);
-    logFlow(`Abhi buzzed ${target.name}`, '⚡');
-    addPulse('Buzz Sent', `You buzzed ${target.name}.`, 'info');
+    logFlow(`Abhi requested check status from ${target.name}`, 'system');
+    addPulse('Ping Sent', `Roommate ${target.name} has been notified.`, 'info');
   };
 
   // Add Item to Shelf
@@ -197,11 +206,11 @@ export default function App() {
     setShelfItems(prev => [newItem, ...prev]);
     setNewShelfName('');
     setShowAddShelfModal(false);
-    logFlow(`Abhi added ${newShelfName} to Shelf`, '📦');
-    addPulse('Shelf Update', `Abhi added ${newShelfName} to Shelf (low stock).`, 'info');
+    logFlow(`Abhi added ${newShelfName} to Shelf requirements`, 'stocked');
+    addPulse('Inventory Update', `Abhi requested restocking of "${newShelfName}".`, 'info');
   };
 
-  // Toggle item status to Restocked (crossed-out animation)
+  // Restock item
   const handleToggleRestock = (item: ShelfItem) => {
     const isCurrentlyStocked = item.status === 'stocked';
     const newStatus = isCurrentlyStocked ? 'low' : 'stocked';
@@ -218,21 +227,21 @@ export default function App() {
     }));
 
     if (newStatus === 'stocked') {
-      logFlow(`Abhi restocked ${item.name}`, '✓');
-      addPulse('Restocked', `${item.name} has been restocked.`, 'success');
+      logFlow(`Abhi restocked item "${item.name}"`, 'stocked');
+      addPulse('Stock Filled', `"${item.name}" has been restocked.`, 'success');
       confetti({
-        particleCount: 50,
-        spread: 40,
+        particleCount: 60,
+        spread: 45,
         origin: { y: 0.8 }
       });
     } else {
-      logFlow(`Abhi marked ${item.name} as running low`, '⚠️');
+      logFlow(`Abhi marked item "${item.name}" as running low`, 'alert');
     }
     
     if (showShelfDetailsModal) setShowShelfDetailsModal(null);
   };
 
-  // Start a shopping Run
+  // Start shopping run
   const handleStartRun = (store: string) => {
     const newRun: RunSession = {
       id: `run_${Date.now()}`,
@@ -242,8 +251,8 @@ export default function App() {
       requests: []
     };
     setActiveRun(newRun);
-    logFlow(`Abhi started a ${store} Run`, '🛒');
-    addPulse('Run Started', `Abhi is on a Run at ${store}. Add your requests!`, 'info');
+    logFlow(`Abhi initiated a shopping Run at ${store}`, 'run');
+    addPulse('Run Started', `Abhi began shopping at ${store}. Send requests.`, 'info');
   };
 
   // Add request to Run
@@ -260,10 +269,10 @@ export default function App() {
       requests: [...activeRun.requests, newReq]
     });
     setNewRequestName('');
-    logFlow(`Abhi requested ${newReq.itemName} for the ${activeRun.store} Run`, '🛒');
+    logFlow(`Abhi added request for "${newReq.itemName}" to the active Run`, 'run');
   };
 
-  // Update Run Request status
+  // Update Run Request
   const handleUpdateRunRequestStatus = (reqId: string, status: RunRequest['status'], price?: number, replacementName?: string, replacementPrice?: number) => {
     if (!activeRun) return;
     setActiveRun({
@@ -278,15 +287,14 @@ export default function App() {
     
     const req = activeRun.requests.find(r => r.id === reqId);
     if (req) {
-      logFlow(`Status of ${req.itemName} changed to ${status}`, '🛒');
+      logFlow(`Updated shopping request "${req.itemName}" status to "${status}"`, 'run');
     }
   };
 
-  // Finish shopping session (integration with Shelf and Split)
+  // Complete Run & Checkout
   const handleCheckoutRun = () => {
     if (!activeRun) return;
     
-    // 1. Move "found" items to Shelf
     const foundRequests = activeRun.requests.filter(r => r.status === 'found' || r.status === 'replaced');
     const newShelfAdditions = foundRequests.map(r => ({
       id: `s_${Date.now()}_${r.id}`,
@@ -300,11 +308,9 @@ export default function App() {
 
     setShelfItems(prev => [...newShelfAdditions, ...prev]);
 
-    // 2. Add as Split Expense
     const totalAmount = foundRequests.reduce((sum, r) => sum + (r.status === 'replaced' ? (r.replacementPrice || 0) : (r.price || 5.00)), 0);
     
     if (totalAmount > 0) {
-      // Calculate equal split shares
       const share = totalAmount / homemates.length;
       const shares: Record<string, number> = {};
       homemates.forEach(m => {
@@ -313,7 +319,7 @@ export default function App() {
 
       const newExpense: Expense = {
         id: `e_${Date.now()}`,
-        title: `${activeRun.store} Run items`,
+        title: `Shopping Run: ${activeRun.store}`,
         amount: Number(totalAmount.toFixed(2)),
         payerId: activeRun.shopperId,
         splitMethod: 'equal',
@@ -323,8 +329,8 @@ export default function App() {
       };
 
       setExpenses(prev => [...prev, newExpense]);
-      logFlow(`Completed ${activeRun.store} Run. Added ${foundRequests.length} items to Shelf & split $${totalAmount.toFixed(2)}`, '🛒');
-      addPulse('Checkout Successful', `Run checkout complete. $${totalAmount.toFixed(2)} split equally.`, 'success');
+      logFlow(`Completed ${activeRun.store} Run. Split cost of $${totalAmount.toFixed(2)}`, 'split');
+      addPulse('Run Complete', `Run to ${activeRun.store} finished. Total cost split: $${totalAmount.toFixed(2)}.`, 'success');
     }
 
     setActiveRun(null);
@@ -346,9 +352,9 @@ export default function App() {
           merchant: 'Costco Wholesale',
           date: 'July 27, 2026',
           items: [
-            { name: 'Organic Milk 3pk', price: 9.99, quantity: 1, payerId: '1' },
-            { name: 'Toilet Paper 30ct', price: 18.99, quantity: 1, payerId: '1' },
-            { name: 'Kirkland Croissants', price: 6.49, quantity: 1, payerId: '1' }
+            { name: 'Organic Almond Milk 3pk', price: 9.99, quantity: 1 },
+            { name: 'Toilet Paper bulk roll', price: 18.99, quantity: 1 },
+            { name: 'Premium Croissants', price: 6.49, quantity: 1 }
           ],
           tax: 2.80,
           total: 38.27
@@ -358,8 +364,8 @@ export default function App() {
           merchant: 'Walmart Supercenter',
           date: 'July 27, 2026',
           items: [
-            { name: 'Dish Soap', price: 3.50, quantity: 1, payerId: '1' },
-            { name: 'Trash Bags 80pk', price: 14.99, quantity: 1, payerId: '1' }
+            { name: 'Liquid Dish Soap', price: 3.50, quantity: 1 },
+            { name: 'Heavy Duty Trash Bags', price: 14.99, quantity: 1 }
           ],
           tax: 1.50,
           total: 19.99
@@ -372,7 +378,6 @@ export default function App() {
   const handleSaveOCRExpense = () => {
     if (!ocrResult) return;
 
-    // Calculate split
     const share = ocrResult.total / homemates.length;
     const shares: Record<string, number> = {};
     homemates.forEach(m => {
@@ -381,7 +386,7 @@ export default function App() {
 
     const newExpense: Expense = {
       id: `e_${Date.now()}`,
-      title: `${ocrResult.merchant} receipt`,
+      title: `OCR Scan: ${ocrResult.merchant}`,
       amount: ocrResult.total,
       payerId: currentUser.id,
       splitMethod: 'equal',
@@ -394,7 +399,7 @@ export default function App() {
     setShowOCRModal(false);
     setOcrResult(null);
 
-    // Auto-restock matching Shelf items if scanned
+    // Auto-restock matching Shelf items
     const itemNamesLower = ocrResult.items.map((i: any) => i.name.toLowerCase());
     setShelfItems(prev => prev.map(s => {
       const match = itemNamesLower.some((name: string) => name.includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(name));
@@ -404,8 +409,8 @@ export default function App() {
       return s;
     }));
 
-    logFlow(`Scanned receipt for ${ocrResult.merchant} ($${ocrResult.total})`, '💸');
-    addPulse('Receipt Scanned', `Receipt from ${ocrResult.merchant} uploaded. Total: $${ocrResult.total}.`, 'success');
+    logFlow(`Uploaded OCR receipt analysis for ${ocrResult.merchant} ($${ocrResult.total})`, 'split');
+    addPulse('Receipt Processed', `Receipt for ${ocrResult.merchant} ($${ocrResult.total}) verified.`, 'success');
     confetti({
       particleCount: 50,
       spread: 40
@@ -417,22 +422,12 @@ export default function App() {
     const amt = parseFloat(newExpAmount);
     if (!newExpTitle.trim() || isNaN(amt) || amt <= 0) return;
 
-    // Calculate split shares based on method
     const shares: Record<string, number> = {};
-    if (newExpSplit === 'equal') {
-      const activeMembers = newExpVisibility;
-      const share = amt / activeMembers.length;
-      activeMembers.forEach(id => {
-        shares[id] = Number(share.toFixed(2));
-      });
-    } else {
-      // For simplicity, custom split splits equally among selected members in this view
-      const activeMembers = newExpVisibility;
-      const share = amt / activeMembers.length;
-      activeMembers.forEach(id => {
-        shares[id] = Number(share.toFixed(2));
-      });
-    }
+    const activeMembers = newExpVisibility;
+    const share = amt / activeMembers.length;
+    activeMembers.forEach(id => {
+      shares[id] = Number(share.toFixed(2));
+    });
 
     const newExpense: Expense = {
       id: `e_${Date.now()}`,
@@ -449,7 +444,7 @@ export default function App() {
     setShowAddExpenseModal(false);
     setNewExpTitle('');
     setNewExpAmount('');
-    logFlow(`Abhi added manual expense "${newExpTitle}" ($${amt.toFixed(2)})`, '💸');
+    logFlow(`Abhi logged manual transaction "${newExpTitle}" ($${amt.toFixed(2)})`, 'split');
   };
 
   // Toggle Chore status
@@ -462,8 +457,8 @@ export default function App() {
     }));
 
     if (!task.completed) {
-      logFlow(`Completed task: ${task.title}`, '🧹');
-      addPulse('Task Completed', `Task "${task.title}" was marked done.`, 'success');
+      logFlow(`Marked chore as complete: "${task.title}"`, 'chore');
+      addPulse('Chore Completed', `Task "${task.title}" completed.`, 'success');
       confetti({
         particleCount: 30,
         spread: 30,
@@ -478,13 +473,52 @@ export default function App() {
     setShelfItems(prev => prev.filter(i => i.id !== id));
     setShowShelfDetailsModal(null);
     if (item) {
-      logFlow(`Removed ${item.name} from Shelf`, '🗑️');
+      logFlow(`Removed item "${item.name}" from inventory catalog`, 'alert');
     }
   };
 
-  // Settle engine calculations
   const optimizedDebts = getOptimizedDebts(expenses, homemates);
   const netBalances = calculateBalances(expenses, homemates);
+
+  // Render a clean initial avatar
+  const renderInitialsAvatar = (member: Homemate, size: number = 38) => {
+    return (
+      <div style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        borderRadius: '50%',
+        background: `${member.color}15`,
+        color: member.color,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: size > 40 ? '0.9rem' : '0.8rem',
+        fontWeight: 700,
+        border: `1.5px solid ${member.color}25`,
+        boxShadow: `0 2px 8px ${member.color}0a`
+      }}>
+        {member.avatar}
+      </div>
+    );
+  };
+
+  // Render custom vector icons for timeline logs instead of emojis
+  const renderFlowIcon = (type: FlowLog['type']) => {
+    switch (type) {
+      case 'alert':
+        return <AlertCircle size={14} style={{ color: 'var(--accent-rose)' }} />;
+      case 'run':
+        return <ShoppingCart size={14} style={{ color: 'var(--accent-blue)' }} />;
+      case 'chore':
+        return <CheckSquare size={14} style={{ color: 'var(--accent-emerald)' }} />;
+      case 'split':
+        return <DollarSign size={14} style={{ color: 'var(--accent-purple)' }} />;
+      case 'stocked':
+        return <Check size={14} style={{ color: 'var(--accent-emerald)' }} />;
+      default:
+        return <Info size={14} style={{ color: 'var(--accent-purple)' }} />;
+    }
+  };
 
   return (
     <div className="bg-blobs">
@@ -498,14 +532,14 @@ export default function App() {
         <header className="app-header">
           <div>
             <div className="brand-title">
-              <Sparkles size={22} className="text-purple-500" style={{ color: 'var(--accent-purple)' }} />
+              <Sparkles size={20} style={{ color: 'var(--accent-purple)' }} />
               Deyibe
             </div>
-            <div className="brand-subtitle">Dabbulu Eyi Bhe!</div>
+            <div className="brand-subtitle">Home Operating System</div>
           </div>
           
           <div className="pulse-badge" onClick={() => setShowPulse(!showPulse)}>
-            <Bell size={20} />
+            <Bell size={18} />
             {pulseAlerts.some(a => !a.read) && <span className="pulse-indicator"></span>}
           </div>
         </header>
@@ -518,42 +552,45 @@ export default function App() {
             right: '15px',
             left: '15px',
             zIndex: 100,
-            maxHeight: '400px',
+            maxHeight: '380px',
             overflowY: 'auto',
-            border: '1px solid var(--glass-border-focus)',
-            background: 'rgba(15, 17, 28, 0.95)'
+            border: '1px solid rgba(0, 0, 0, 0.08)',
+            background: 'rgba(255, 255, 255, 0.98)',
+            boxShadow: '0 15px 40px -10px rgba(0, 0, 0, 0.12)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', alignItems: 'center' }}>
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Zap size={18} style={{ color: 'var(--accent-amber)' }} />
-                Pulse Board
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.95rem' }}>
+                <Zap size={16} style={{ color: 'var(--accent-amber)' }} />
+                Pulse Notifications
               </h3>
               <button 
                 onClick={() => {
                   setPulseAlerts(prev => prev.map(a => ({ ...a, read: true })));
                   setShowPulse(false);
                 }} 
-                style={{ fontSize: '0.8rem', background: 'none', border: 'none', color: 'var(--accent-purple)' }}
+                style={{ fontSize: '0.75rem', background: 'none', border: 'none', color: 'var(--accent-purple)', fontWeight: 700 }}
               >
-                Mark all read
+                Clear all
               </button>
             </div>
             {pulseAlerts.length === 0 ? (
-              <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', padding: '20px 0' }}>All quiet on the home front.</p>
+              <p style={{ textAlign: 'center', color: '#64748b', padding: '20px 0', fontSize: '0.85rem' }}>All updates verified.</p>
             ) : (
               pulseAlerts.map(alert => (
                 <div key={alert.id} style={{
                   padding: '10px 12px',
                   borderRadius: '10px',
-                  background: alert.read ? 'transparent' : 'rgba(255,255,255,0.03)',
+                  background: alert.read ? 'transparent' : 'rgba(0,0,0,0.01)',
                   borderLeft: `3px solid ${alert.type === 'alert' ? 'var(--accent-rose)' : alert.type === 'success' ? 'var(--accent-emerald)' : 'var(--accent-blue)'}`,
-                  marginBottom: '8px'
+                  marginBottom: '8px',
+                  border: '1px solid rgba(0, 0, 0, 0.02)',
+                  borderLeftWidth: '3px'
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
                     <span>{alert.title}</span>
-                    <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)' }}>{alert.timestamp}</span>
+                    <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 500 }}>{alert.timestamp}</span>
                   </div>
-                  <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: '4px' }}>{alert.message}</p>
+                  <p style={{ fontSize: '0.8rem', color: '#475569', marginTop: '3px', lineHeight: 1.4 }}>{alert.message}</p>
                 </div>
               ))
             )}
@@ -563,109 +600,102 @@ export default function App() {
         {/* Main Content Area */}
         <main className="app-content">
           
-          {/* TAB 1: HOME (FEED & HOME OS) */}
+          {/* TAB 1: HOME (TIMELINE & DASHBOARD) */}
           {activeTab === 'home' && (
             <div>
-              {/* Quick Summary widgets */}
+              {/* Quick Balances Widget */}
               <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
-                <div className="glass-card" style={{ flex: 1, padding: '16px', marginBottom: 0, textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>Your Net Balance</div>
+                <div className="glass-card" style={{ flex: 1, padding: '14px', marginBottom: 0, textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Your Balance</div>
                   <div style={{ 
-                    fontSize: '1.4rem', 
+                    fontSize: '1.3rem', 
                     fontWeight: 800, 
-                    marginTop: '4px',
+                    marginTop: '2px',
                     color: netBalances[currentUser.id] >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'
                   }}>
                     {netBalances[currentUser.id] >= 0 ? '+' : ''}${netBalances[currentUser.id].toFixed(2)}
                   </div>
                 </div>
-                <div className="glass-card" style={{ flex: 1, padding: '16px', marginBottom: 0, textAlign: 'center', cursor: 'pointer' }} onClick={() => setActiveTab('shelf')}>
-                  <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>Needed Stock</div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: '4px', color: 'var(--accent-blue)' }}>
-                    {shelfItems.filter(i => i.status === 'out' || i.status === 'low').length} items
+                <div className="glass-card" style={{ flex: 1, padding: '14px', marginBottom: 0, textAlign: 'center', cursor: 'pointer' }} onClick={() => setActiveTab('shelf')}>
+                  <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Out of Stock</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, marginTop: '2px', color: 'var(--accent-blue)' }}>
+                    {shelfItems.filter(i => i.status === 'out' || i.status === 'low').length} Items
                   </div>
                 </div>
               </div>
 
-              {/* Active Run Companion Alert banner */}
+              {/* Active shopping session widget */}
               {activeRun && (
                 <div className="glass-card" style={{
                   borderLeft: '4px solid var(--accent-blue)',
-                  background: 'rgba(59, 130, 246, 0.06)',
-                  padding: '14px 16px',
+                  background: 'rgba(59, 130, 246, 0.05)',
+                  padding: '12px 14px',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   cursor: 'pointer'
                 }} onClick={() => setActiveTab('run')}>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '0.95rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>
                       <span className="run-dot"></span>
-                      Active Run: {homemates.find(h => h.id === activeRun.shopperId)?.name} @ {activeRun.store}
+                      Shopping Session: {homemates.find(h => h.id === activeRun.shopperId)?.name} @ {activeRun.store}
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', marginTop: '2px' }}>
-                      {activeRun.requests.length} requests active. Tap to coordinate!
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
+                      {activeRun.requests.length} requests active. Tap to view requests.
                     </div>
                   </div>
-                  <ArrowRight size={18} style={{ color: 'var(--accent-blue)' }} />
+                  <ArrowRight size={16} style={{ color: 'var(--accent-blue)' }} />
                 </div>
               )}
 
-              {/* Quick Homemates Buzz Section */}
-              <div className="glass-card" style={{ padding: '16px' }}>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '12px', color: 'rgba(255,255,255,0.85)' }}>Homemates</h3>
-                <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', paddingBottom: '6px' }}>
+              {/* Homemates profile list with buzz feature */}
+              <div className="glass-card" style={{ padding: '14px' }}>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Homemates</h3>
+                <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', paddingBottom: '4px' }}>
                   {homemates.map(m => (
-                    <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '70px' }}>
-                      <div style={{
-                        width: '46px',
-                        height: '46px',
-                        borderRadius: '50%',
-                        background: m.color,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '1.4rem',
-                        border: '2px solid rgba(255,255,255,0.1)',
-                        boxShadow: `0 0 15px ${m.color}33`,
-                        cursor: 'pointer',
-                        position: 'relative'
-                      }} onClick={() => m.id !== currentUser.id && handleBuzz(m)}>
-                        {m.avatar}
+                    <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '60px' }}>
+                      <div 
+                        style={{ cursor: 'pointer', position: 'relative' }} 
+                        onClick={() => m.id !== currentUser.id && handleBuzz(m)}
+                      >
+                        {renderInitialsAvatar(m, 44)}
                         {m.id !== currentUser.id && (
                           <div style={{
                             position: 'absolute',
                             bottom: -2,
                             right: -2,
-                            background: '#0d0f1a',
+                            background: '#ffffff',
                             borderRadius: '50%',
-                            padding: '3px',
-                            border: '1px solid var(--glass-border)'
+                            padding: '2px',
+                            border: '1px solid rgba(0,0,0,0.06)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
                           }}>
-                            <Zap size={10} style={{ color: 'var(--accent-amber)' }} />
+                            <Zap size={9} style={{ color: 'var(--accent-amber)' }} />
                           </div>
                         )}
                       </div>
-                      <span style={{ fontSize: '0.75rem', marginTop: '6px', color: 'rgba(255,255,255,0.8)' }}>
-                        {m.name.split(' ')[0]}
+                      <span style={{ fontSize: '0.75rem', marginTop: '4px', color: '#475569', fontWeight: 600 }}>
+                        {m.name}
                       </span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Shared Chores & Tasks checklist */}
+              {/* Shared chores checklist */}
               <div className="glass-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <CheckSquare size={18} style={{ color: 'var(--accent-emerald)' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <CheckSquare size={16} style={{ color: 'var(--accent-emerald)' }} />
                     Active Chores
                   </h3>
-                  <span style={{ fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-emerald)', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
-                    {tasks.filter(t => !t.completed).length} pending
+                  <span style={{ fontSize: '0.7rem', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                    {tasks.filter(t => !t.completed).length} Pending
                   </span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {tasks.map(task => (
                     <div 
                       key={task.id} 
@@ -673,33 +703,34 @@ export default function App() {
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '12px',
-                        padding: '10px 12px',
-                        borderRadius: '10px',
-                        background: 'rgba(255,255,255,0.02)',
-                        border: '1px solid var(--glass-border)',
+                        gap: '10px',
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        background: 'rgba(255,255,255,0.4)',
+                        border: '1px solid rgba(0, 0, 0, 0.03)',
                         cursor: 'pointer',
-                        transition: 'all 0.2s ease',
+                        transition: 'all 0.15s ease',
                         opacity: task.completed ? 0.5 : 1
                       }}
                     >
                       {task.completed ? (
-                        <CheckSquare size={18} style={{ color: 'var(--accent-emerald)' }} />
+                        <CheckSquare size={16} style={{ color: 'var(--accent-emerald)' }} />
                       ) : (
-                        <Square size={18} style={{ color: 'rgba(255,255,255,0.4)' }} />
+                        <Square size={16} style={{ color: 'rgba(0,0,0,0.25)' }} />
                       )}
                       <div style={{ flex: 1 }}>
                         <div style={{ 
-                          fontSize: '0.9rem', 
+                          fontSize: '0.85rem', 
                           fontWeight: 600,
-                          textDecoration: task.completed ? 'line-through' : 'none' 
+                          textDecoration: task.completed ? 'line-through' : 'none',
+                          color: '#1e293b'
                         }}>
                           {task.title}
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px', display: 'flex', gap: '8px' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px', display: 'flex', gap: '6px' }}>
                           <span>Due: {task.dueDate}</span>
                           <span>•</span>
-                          <span>Assigned: {task.assignedTo.map(id => homemates.find(h => h.id === id)?.name.split(' ')[0]).join(', ')}</span>
+                          <span>Assigned: {task.assignedTo.map(id => homemates.find(h => h.id === id)?.name).join(', ')}</span>
                         </div>
                       </div>
                     </div>
@@ -707,40 +738,40 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Household Flow Timeline logs */}
+              {/* Activity Timeline (Flow) */}
               <div className="glass-card">
-                <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Clock size={18} style={{ color: 'var(--accent-purple)' }} />
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Clock size={16} style={{ color: 'var(--accent-purple)' }} />
                   House Flow
                 </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative' }}>
                   <div style={{
                     position: 'absolute',
                     left: '11px',
-                    top: '12px',
-                    bottom: '12px',
-                    width: '1px',
-                    background: 'rgba(255,255,255,0.06)'
+                    top: '10px',
+                    bottom: '10px',
+                    width: '1.5px',
+                    background: 'rgba(0,0,0,0.04)'
                   }}></div>
                   {flowLogs.slice(0, 5).map(log => (
-                    <div key={log.id} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                    <div key={log.id} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                       <div style={{
                         width: '24px',
                         height: '24px',
                         borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid var(--glass-border)',
+                        background: 'rgba(255, 255, 255, 0.9)',
+                        border: '1.5px solid rgba(0,0,0,0.03)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '0.85rem',
-                        zIndex: 1
+                        zIndex: 1,
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
                       }}>
-                        {log.icon}
+                        {renderFlowIcon(log.type)}
                       </div>
                       <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.85)' }}>{log.text}</p>
-                        <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)' }}>{log.time}</span>
+                        <p style={{ fontSize: '0.82rem', color: '#334155', fontWeight: 500 }}>{log.text}</p>
+                        <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{log.time}</span>
                       </div>
                     </div>
                   ))}
@@ -750,51 +781,42 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 2: SHELF (DIGITAL REFRIGERATOR DOOR BOARD) */}
+          {/* TAB 2: SHELF (MINIMALIST DASHBOARD GRID) */}
           {activeTab === 'shelf' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Shelf</h2>
-                  <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>Household pantry & inventory</p>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Shelf</h2>
+                  <p style={{ fontSize: '0.78rem', color: '#64748b' }}>Shared household inventory tracker</p>
                 </div>
-                <button className="btn-primary" style={{ padding: '8px 14px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
+                <button className="btn-primary" style={{ padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
                   onClick={() => setShowAddShelfModal(true)}>
-                  <Plus size={16} />
+                  <Plus size={14} />
                   Add Stock
                 </button>
               </div>
 
-              {/* Fridge Door container with sticky note elements */}
-              <div className="fridge-door">
+              {/* Minimalist Grid of items */}
+              <div className="shelf-board">
                 {shelfItems.map(item => (
                   <div 
                     key={item.id} 
-                    className={`fridge-magnet ${item.status === 'stocked' ? 'stocked' : ''}`}
+                    className={`shelf-item-card ${item.status === 'stocked' ? 'stocked' : ''}`}
                     onClick={() => setShowShelfDetailsModal(item)}
+                    style={{
+                      borderLeft: `3px solid ${item.priority === 'high' ? 'var(--accent-rose)' : item.priority === 'medium' ? 'var(--accent-amber)' : 'var(--accent-blue)'}`
+                    }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
-                      <span className="magnet-text" style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%' }}>
-                        {item.name}
-                      </span>
-                      <span style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: item.status === 'stocked' ? 'var(--accent-emerald)' : item.status === 'low' ? 'var(--accent-amber)' : 'var(--accent-rose)',
-                        boxShadow: `0 0 8px ${item.status === 'stocked' ? 'var(--accent-emerald)' : item.status === 'low' ? 'var(--accent-amber)' : 'var(--accent-rose)'}`
-                      }}></span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <span className="shelf-item-name">{item.name}</span>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
-                      <span className="magnet-priority" style={{
-                        background: item.priority === 'high' ? 'rgba(244, 63, 94, 0.15)' : item.priority === 'medium' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.1)',
-                        color: item.priority === 'high' ? 'var(--accent-rose)' : item.priority === 'medium' ? 'var(--accent-amber)' : 'rgba(255,255,255,0.6)'
-                      }}>
-                        {item.priority}
+                    <div style={{ marginTop: '8px' }}>
+                      <span className={`shelf-status-pill ${item.status}`}>
+                        {item.status === 'stocked' ? 'Stocked' : item.status === 'low' ? 'Low Stock' : 'Out of stock'}
                       </span>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'rgba(0,0,0,0.65)', fontWeight: 600 }}>
-                        <span>by {homemates.find(h => h.id === item.addedById)?.name.split(' ')[0]}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', color: '#94a3b8', marginTop: '6px', fontWeight: 500 }}>
+                        <span>by {homemates.find(h => h.id === item.addedById)?.name}</span>
                         <span>{item.timestamp}</span>
                       </div>
                     </div>
@@ -806,21 +828,21 @@ export default function App() {
               {showAddShelfModal && (
                 <div style={{
                   position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(5,5,8,0.85)', backdropFilter: 'blur(10px)',
+                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
                   display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
                 }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '400px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '18px' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Add to Shelf</h3>
-                      <X size={20} className="cursor-pointer" onClick={() => setShowAddShelfModal(false)} />
+                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Add Catalog Item</h3>
+                      <X size={18} className="cursor-pointer" onClick={() => setShowAddShelfModal(false)} />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       <div>
-                        <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>Item Name</label>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Item Name</label>
                         <input type="text" placeholder="e.g. Toilet Paper, Eggs" value={newShelfName} onChange={e => setNewShelfName(e.target.value)} style={{ marginTop: '4px' }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>Priority</label>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Priority Level</label>
                         <select value={newShelfPriority} onChange={e => setNewShelfPriority(e.target.value as any)} style={{ marginTop: '4px' }}>
                           <option value="high">High (Urgent)</option>
                           <option value="medium">Medium (Regular)</option>
@@ -828,16 +850,16 @@ export default function App() {
                         </select>
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>Visibility (Who sees this?)</label>
-                        <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Visibility Scope</label>
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
                           {homemates.map(h => (
                             <button
                               key={h.id}
                               style={{
-                                padding: '6px 10px', fontSize: '0.8rem', borderRadius: '8px',
-                                border: '1px solid var(--glass-border)',
-                                background: newShelfVisibility.includes(h.id) ? 'var(--accent-purple)' : 'var(--glass-bg)',
-                                color: 'white'
+                                padding: '5px 8px', fontSize: '0.72rem', borderRadius: '6px',
+                                border: '1px solid rgba(0,0,0,0.06)',
+                                background: newShelfVisibility.includes(h.id) ? 'var(--accent-purple)' : 'rgba(0,0,0,0.02)',
+                                color: newShelfVisibility.includes(h.id) ? 'white' : '#475569'
                               }}
                               onClick={() => {
                                 if (newShelfVisibility.includes(h.id)) {
@@ -847,14 +869,14 @@ export default function App() {
                                 }
                               }}
                             >
-                              {h.name.split(' ')[0]}
+                              {h.name}
                             </button>
                           ))}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                        <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setShowAddShelfModal(false)}>Cancel</button>
-                        <button className="btn-primary" style={{ flex: 1 }} onClick={handleAddShelfItem}>Add Item</button>
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                        <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setShowAddShelfModal(false)}>Cancel</button>
+                        <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleAddShelfItem}>Add Item</button>
                       </div>
                     </div>
                   </div>
@@ -865,30 +887,30 @@ export default function App() {
               {showShelfDetailsModal && (
                 <div style={{
                   position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(5,5,8,0.85)', backdropFilter: 'blur(10px)',
+                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
                   display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
                 }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '400px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '18px' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Shelf Item</h3>
-                      <X size={20} className="cursor-pointer" onClick={() => setShowShelfDetailsModal(null)} />
+                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Item Properties</h3>
+                      <X size={18} className="cursor-pointer" onClick={() => setShowShelfDetailsModal(null)} />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', textAlign: 'center' }}>
                       <div style={{
-                        width: '60px', height: '60px', borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem'
+                        width: '50px', height: '50px', borderRadius: '50%',
+                        background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.04)',
+                        display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center'
                       }}>
-                        📦
+                        <Package size={22} style={{ color: 'var(--accent-purple)' }} />
                       </div>
                       <div>
-                        <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{showShelfDetailsModal.name}</h2>
-                        <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                          Added {showShelfDetailsModal.timestamp} by {homemates.find(h => h.id === showShelfDetailsModal.addedById)?.name}
+                        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>{showShelfDetailsModal.name}</h2>
+                        <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
+                          Registered {showShelfDetailsModal.timestamp} by {homemates.find(h => h.id === showShelfDetailsModal.addedById)?.name}
                         </p>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '10px', width: '100%', marginTop: '10px' }}>
+                      <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px' }}>
                         <button 
                           className="btn-primary" 
                           style={{ 
@@ -896,21 +918,22 @@ export default function App() {
                             display: 'flex', 
                             alignItems: 'center', 
                             justifyContent: 'center', 
-                            gap: '6px',
-                            background: showShelfDetailsModal.status === 'stocked' ? 'var(--accent-amber)' : 'var(--accent-emerald)'
+                            gap: '4px',
+                            background: showShelfDetailsModal.status === 'stocked' ? 'var(--accent-amber)' : 'var(--accent-emerald)',
+                            padding: '9px'
                           }} 
                           onClick={() => handleToggleRestock(showShelfDetailsModal)}
                         >
-                          <Check size={18} />
-                          {showShelfDetailsModal.status === 'stocked' ? 'Mark Out of Stock' : 'Mark Restocked'}
+                          <Check size={16} />
+                          {showShelfDetailsModal.status === 'stocked' ? 'Mark running low' : 'Mark restocked'}
                         </button>
                         
                         <button 
                           className="btn-secondary" 
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px' }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 12px' }}
                           onClick={() => handleDeleteShelfItem(showShelfDetailsModal.id)}
                         >
-                          <Trash2 size={18} style={{ color: 'var(--accent-rose)' }} />
+                          <Trash2 size={16} style={{ color: 'var(--accent-rose)' }} />
                         </button>
                       </div>
                     </div>
@@ -921,40 +944,44 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 3: RUN (COLLABORATIVE SHOPPING COMPANION) */}
+          {/* TAB 3: RUN (COLLABORATIVE SHOPPING SESSION) */}
           {activeTab === 'run' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Run</h2>
-                  <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>Real-time grocery & store run companion</p>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Run</h2>
+                  <p style={{ fontSize: '0.78rem', color: '#64748b' }}>Real-time in-store requests coordination</p>
                 </div>
               </div>
 
               {!activeRun ? (
-                /* No Active Run state */
-                <div className="glass-card" style={{ padding: '40px 20px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '3rem', marginBottom: '12px' }}>🛒</div>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '6px' }}>No Active Run</h3>
-                  <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)', marginBottom: '20px' }}>
-                    Going to a store? Start a Run session so roommates can add live requests.
+                <div className="glass-card" style={{ padding: '30px 16px', textAlign: 'center' }}>
+                  <div style={{
+                    width: '54px', height: '54px', borderRadius: '50%',
+                    background: 'rgba(59, 130, 246, 0.08)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px'
+                  }}>
+                    <ShoppingCart size={24} style={{ color: 'var(--accent-blue)' }} />
+                  </div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '4px' }}>No Active Session</h3>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '16px' }}>
+                    Shopping at a local store? Initiate a session to alert your homemates for requests.
                   </p>
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <button className="btn-primary" onClick={() => handleStartRun('Costco')}>Start Costco Run</button>
                     <button className="btn-secondary" onClick={() => handleStartRun('Walmart')}>Start Walmart Run</button>
                   </div>
                 </div>
               ) : (
-                /* Active Run state */
                 <div>
-                  <div className="glass-card" style={{ borderLeft: '4px solid var(--accent-blue)', padding: '16px', marginBottom: '16px' }}>
+                  <div className="glass-card" style={{ borderLeft: '4px solid var(--accent-blue)', padding: '14px', marginBottom: '12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--accent-blue)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px' }}>
-                          LIVE SHOPPING SESSION
+                        <div style={{ fontSize: '0.7rem', color: 'var(--accent-blue)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          LIVE COLLABORATION ACTIVE
                         </div>
-                        <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginTop: '2px' }}>
+                        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '2px', color: '#0f172a' }}>
                           {homemates.find(h => h.id === activeRun.shopperId)?.name}'s {activeRun.store} Run
                         </h3>
                       </div>
@@ -963,51 +990,50 @@ export default function App() {
                   </div>
 
                   {/* Requests list */}
-                  <div className="glass-card" style={{ padding: '18px' }}>
-                    <h4 style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: '14px' }}>Roommate Requests</h4>
+                  <div className="glass-card" style={{ padding: '14px' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 800, marginBottom: '10px', color: '#475569' }}>Active Run requests</h4>
                     
                     {activeRun.requests.length === 0 ? (
-                      <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', padding: '20px 0', fontSize: '0.85rem' }}>
-                        No requests yet. Send a request below!
+                      <p style={{ textAlign: 'center', color: '#64748b', padding: '14px 0', fontSize: '0.8rem' }}>
+                        No items requested. Send request below.
                       </p>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '14px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
                         {activeRun.requests.map(req => (
                           <div 
                             key={req.id} 
                             style={{
-                              padding: '12px', borderRadius: '10px', 
-                              background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)',
+                              padding: '10px', borderRadius: '8px', 
+                              background: 'rgba(255,255,255,0.4)', border: '1px solid rgba(0,0,0,0.03)',
                               display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                             }}
                           >
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>
                                 {req.itemName}
                               </div>
-                              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
-                                From: {homemates.find(h => h.id === req.requesterId)?.name.split(' ')[0]}
+                              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px' }}>
+                                Requested by: {homemates.find(h => h.id === req.requesterId)?.name}
                               </div>
                             </div>
                             
-                            {/* Shopper controls status */}
-                            <div style={{ display: 'flex', gap: '6px' }}>
+                            <div style={{ display: 'flex', gap: '4px' }}>
                               {req.status === 'pending' || req.status === 'searching' ? (
                                 <>
                                   <button 
-                                    style={{ padding: '6px 10px', fontSize: '0.75rem', borderRadius: '6px', border: 'none', background: 'var(--accent-emerald)', color: 'white' }}
+                                    style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '5px', border: 'none', background: 'var(--accent-emerald)', color: 'white' }}
                                     onClick={() => handleUpdateRunRequestStatus(req.id, 'found', 8.50)}
                                   >
                                     Found
                                   </button>
                                   <button 
-                                    style={{ padding: '6px 10px', fontSize: '0.75rem', borderRadius: '6px', border: 'none', background: 'var(--accent-rose)', color: 'white' }}
-                                    onClick={() => handleUpdateRunRequestStatus(req.id, 'replaced', undefined, 'Kirkland alternative', 7.99)}
+                                    style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '5px', border: 'none', background: 'var(--accent-rose)', color: 'white' }}
+                                    onClick={() => handleUpdateRunRequestStatus(req.id, 'replaced', undefined, 'Alternative Item', 7.99)}
                                   >
                                     Replace
                                   </button>
                                   <button 
-                                    style={{ padding: '6px 10px', fontSize: '0.75rem', borderRadius: '6px', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white' }}
+                                    style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '5px', border: 'none', background: 'rgba(0,0,0,0.06)', color: '#475569' }}
                                     onClick={() => handleUpdateRunRequestStatus(req.id, 'out')}
                                   >
                                     Out
@@ -1015,9 +1041,9 @@ export default function App() {
                                 </>
                               ) : (
                                 <span style={{
-                                  fontSize: '0.75rem', fontWeight: 800, padding: '4px 8px', borderRadius: '6px',
-                                  background: req.status === 'found' ? 'rgba(16, 185, 129, 0.15)' : req.status === 'replaced' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(244, 63, 94, 0.15)',
-                                  color: req.status === 'found' ? 'var(--accent-emerald)' : req.status === 'replaced' ? 'var(--accent-amber)' : 'var(--accent-rose)',
+                                  fontSize: '0.7rem', fontWeight: 800, padding: '3px 6px', borderRadius: '4px',
+                                  background: req.status === 'found' ? 'rgba(16, 185, 129, 0.1)' : req.status === 'replaced' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(244, 63, 94, 0.1)',
+                                  color: req.status === 'found' ? '#059669' : req.status === 'replaced' ? '#d97706' : '#e11d48',
                                   textTransform: 'uppercase'
                                 }}>
                                   {req.status} {req.price && `($${req.price})`}
@@ -1029,22 +1055,23 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Add new request input */}
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    {/* Add new request */}
+                    <div style={{ display: 'flex', gap: '6px' }}>
                       <input 
                         type="text" 
-                        placeholder="Add item request..." 
+                        placeholder="Request item..." 
                         value={newRequestName} 
                         onChange={e => setNewRequestName(e.target.value)} 
+                        style={{ padding: '9px' }}
                       />
-                      <button className="btn-primary" style={{ padding: '0 16px' }} onClick={handleAddRunRequest}>Request</button>
+                      <button className="btn-primary" style={{ padding: '0 12px', fontSize: '0.8rem' }} onClick={handleAddRunRequest}>Request</button>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setActiveRun(null)}>Cancel Run</button>
-                    <button className="btn-primary" style={{ flex: 1, background: 'linear-gradient(135deg, var(--accent-blue) 0%, #2563eb 100%)', boxShadow: '0 4px 15px var(--accent-blue-glow)' }} onClick={handleCheckoutRun}>
-                      Checkout & Add Stock
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setActiveRun(null)}>Cancel Run</button>
+                    <button className="btn-primary" style={{ flex: 1, padding: '9px', background: 'linear-gradient(135deg, var(--accent-blue) 0%, #2563eb 100%)', boxShadow: '0 4px 12px var(--accent-blue-glow)' }} onClick={handleCheckoutRun}>
+                      Complete Checkout
                     </button>
                   </div>
                 </div>
@@ -1052,49 +1079,49 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 4: SPLIT & SETTLE (EXPENSE SPLITTING & RECEIPT SCANNING) */}
+          {/* TAB 4: SPLIT & SETTLE (Smart Expense splitting) */}
           {activeTab === 'split' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Split</h2>
-                  <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>Splitwise style expense settlement</p>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Split</h2>
+                  <p style={{ fontSize: '0.78rem', color: '#64748b' }}>Calculate and settle shared balances</p>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button className="btn-secondary" style={{ padding: '8px 12px', borderRadius: '10px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button className="btn-secondary" style={{ padding: '7px 10px', borderRadius: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                     onClick={() => setShowOCRModal(true)}>
-                    <Camera size={16} />
+                    <Camera size={14} />
                     Scan
                   </button>
-                  <button className="btn-primary" style={{ padding: '8px 12px', borderRadius: '10px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  <button className="btn-primary" style={{ padding: '7px 10px', borderRadius: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                     onClick={() => setShowAddExpenseModal(true)}>
-                    <Plus size={16} />
-                    Add Bill
+                    <Plus size={14} />
+                    Log
                   </button>
                 </div>
               </div>
 
               {/* Debt suggestions widget */}
-              <div className="glass-card" style={{ borderLeft: '4px solid var(--accent-purple)', background: 'rgba(139, 92, 246, 0.05)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h3 style={{ fontSize: '0.95rem', fontWeight: 800 }}>Settle Suggestions</h3>
-                  <button className="btn-primary" style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px' }}
+              <div className="glass-card" style={{ borderLeft: '3px solid var(--accent-purple)', background: 'rgba(99, 102, 241, 0.03)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Optimization suggests</h3>
+                  <button className="btn-primary" style={{ padding: '4px 8px', fontSize: '0.72rem', borderRadius: '6px' }}
                     onClick={() => setShowSettleModal(true)}>
                     Settle Up
                   </button>
                 </div>
 
                 {optimizedDebts.length === 0 ? (
-                  <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>All settled! No debts suggestions.</p>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b' }}>No pending balances suggested. You are all settled.</p>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     {optimizedDebts.map((debt, index) => {
                       const debtor = homemates.find(h => h.id === debt.debtorId)?.name || 'Someone';
                       const creditor = homemates.find(h => h.id === debt.creditorId)?.name || 'Someone';
                       return (
-                        <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                          <span>{debtor} owes {creditor}</span>
-                          <span style={{ fontWeight: 800, color: 'var(--accent-rose)' }}>${debt.amount.toFixed(2)}</span>
+                        <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 500, color: '#1e293b' }}>
+                          <span>{debtor} to {creditor}</span>
+                          <span style={{ fontWeight: 700, color: 'var(--accent-rose)' }}>${debt.amount.toFixed(2)}</span>
                         </div>
                       );
                     })}
@@ -1102,28 +1129,28 @@ export default function App() {
                 )}
               </div>
 
-              {/* Expenses List */}
+              {/* Expense list history */}
               <div className="glass-card">
-                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '14px' }}>Expense History</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 800, marginBottom: '10px', color: '#475569' }}>Transaction History</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {expenses.map(exp => (
                     <div 
                       key={exp.id} 
                       style={{
-                        padding: '12px', borderRadius: '10px', 
-                        background: 'rgba(255,255,255,0.01)', border: '1px solid var(--glass-border)',
+                        padding: '10px 12px', borderRadius: '8px', 
+                        background: 'rgba(255,255,255,0.4)', border: '1px solid rgba(0,0,0,0.02)',
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                       }}
                     >
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{exp.title}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
-                          Paid by {homemates.find(h => h.id === exp.payerId)?.name.split(' ')[0]} on {exp.date}
+                        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>{exp.title}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px' }}>
+                          Paid by {homemates.find(h => h.id === exp.payerId)?.name} on {exp.date}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 800, fontSize: '1rem' }}>${exp.amount.toFixed(2)}</div>
-                        <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: 'rgba(255,255,255,0.6)' }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>${exp.amount.toFixed(2)}</div>
+                        <span style={{ fontSize: '0.65rem', background: 'rgba(0,0,0,0.03)', padding: '1px 4px', borderRadius: '4px', color: '#64748b', fontWeight: 600 }}>
                           {exp.splitMethod} split
                         </span>
                       </div>
@@ -1136,18 +1163,18 @@ export default function App() {
               {showSettleModal && (
                 <div style={{
                   position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(5,5,8,0.85)', backdropFilter: 'blur(10px)',
+                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
                   display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
                 }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '400px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '18px' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Settle Balances</h3>
-                      <X size={20} className="cursor-pointer" onClick={() => setShowSettleModal(false)} />
+                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Clear Balances</h3>
+                      <X size={18} className="cursor-pointer" onClick={() => setShowSettleModal(false)} />
                     </div>
                     {optimizedDebts.length === 0 ? (
-                      <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)', padding: '20px 0' }}>Nothing to settle!</p>
+                      <p style={{ textAlign: 'center', color: '#64748b', padding: '14px 0', fontSize: '0.85rem' }}>No balance to settle.</p>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {optimizedDebts.map((debt, index) => {
                           const debtor = homemates.find(h => h.id === debt.debtorId);
                           const creditor = homemates.find(h => h.id === debt.creditorId);
@@ -1156,18 +1183,18 @@ export default function App() {
                               key={index} 
                               style={{
                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.02)',
-                                border: '1px solid var(--glass-border)'
+                                padding: '8px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.01)',
+                                border: '1px solid rgba(0,0,0,0.03)'
                               }}
                             >
-                              <div>
-                                <span style={{ fontWeight: 600 }}>{debtor?.name}</span>
-                                <span style={{ margin: '0 8px', color: 'rgba(255,255,255,0.4)' }}>to</span>
-                                <span style={{ fontWeight: 600 }}>{creditor?.name}</span>
+                              <div style={{ fontSize: '0.82rem', color: '#334155' }}>
+                                <span style={{ fontWeight: 700 }}>{debtor?.name}</span>
+                                <span style={{ margin: '0 4px', color: '#94a3b8' }}>to</span>
+                                <span style={{ fontWeight: 700 }}>{creditor?.name}</span>
                               </div>
                               <button 
                                 className="btn-primary" 
-                                style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                style={{ padding: '5px 10px', fontSize: '0.75rem' }}
                                 onClick={() => handleSettleUp(debt.debtorId, debt.creditorId, debt.amount)}
                               >
                                 Pay ${debt.amount.toFixed(2)}
@@ -1181,73 +1208,72 @@ export default function App() {
                 </div>
               )}
 
-              {/* OCR Receipt Upload Modal */}
+              {/* OCR Scanner Modal */}
               {showOCRModal && (
                 <div style={{
                   position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(5,5,8,0.85)', backdropFilter: 'blur(10px)',
+                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
                   display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
                 }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '400px', maxHeight: '90%', overflowY: 'auto' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '18px' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Scan Receipt</h3>
-                      <X size={20} className="cursor-pointer" onClick={() => { setShowOCRModal(false); setOcrResult(null); }} />
+                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', maxHeight: '90%', overflowY: 'auto', border: '1px solid rgba(0,0,0,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>OCR Receipt Scan</h3>
+                      <X size={18} className="cursor-pointer" onClick={() => { setShowOCRModal(false); setOcrResult(null); }} />
                     </div>
                     
                     {!ocrResult ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center', textAlign: 'center', padding: '20px 0' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', textAlign: 'center', padding: '14px 0' }}>
                         <div style={{
-                          width: '70px', height: '70px', borderRadius: '50%',
-                          background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem'
+                          width: '54px', height: '54px', borderRadius: '50%',
+                          background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.04)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}>
-                          📷
+                          <Camera size={22} style={{ color: 'var(--accent-purple)' }} />
                         </div>
                         {ocrScanning ? (
                           <div>
-                            <RefreshCw size={24} className="animate-spin" style={{ color: 'var(--accent-purple)', margin: '0 auto 10px' }} />
-                            <p style={{ fontWeight: 600 }}>Analyzing receipt layout...</p>
-                            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>Extracting lines, taxes, and merchant info</p>
+                            <RefreshCw size={20} className="animate-spin" style={{ color: 'var(--accent-purple)', margin: '0 auto 8px' }} />
+                            <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>Processing layout structures...</p>
+                            <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>Executing item classification OCR</p>
                           </div>
                         ) : (
                           <div>
-                            <p style={{ fontWeight: 600 }}>Upload receipt snapshot</p>
-                            <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', marginTop: '4px', marginBottom: '16px' }}>Supports PNG, JPG, or PDF file types</p>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                              <button className="btn-primary" onClick={() => triggerOCRScan('Costco')}>Scan Costco Receipt</button>
-                              <button className="btn-secondary" onClick={() => triggerOCRScan('Walmart')}>Scan Walmart Receipt</button>
+                            <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>Analyze printed receipts</p>
+                            <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', marginBottom: '12px' }}>Preload receipt dataset below</p>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button className="btn-primary" style={{ padding: '8px 12px', fontSize: '0.75rem' }} onClick={() => triggerOCRScan('Costco')}>Scan Costco Bill</button>
+                              <button className="btn-secondary" style={{ padding: '8px 12px', fontSize: '0.75rem' }} onClick={() => triggerOCRScan('Walmart')}>Scan Walmart Bill</button>
                             </div>
                           </div>
                         )}
                       </div>
                     ) : (
-                      /* OCR Results display */
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '8px' }}>
                           <div>
-                            <h4 style={{ fontWeight: 800 }}>{ocrResult.merchant}</h4>
-                            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>{ocrResult.date}</span>
+                            <h4 style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>{ocrResult.merchant}</h4>
+                            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{ocrResult.date}</span>
                           </div>
-                          <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>${ocrResult.total.toFixed(2)}</span>
+                          <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>${ocrResult.total.toFixed(2)}</span>
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>Detected Items</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#94a3b8' }}>Identified Items</span>
                           {ocrResult.items.map((item: any, idx: number) => (
-                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '6px 0' }}>
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#334155' }}>
                               <span>{item.name}</span>
                               <span style={{ fontWeight: 700 }}>${item.price.toFixed(2)}</span>
                             </div>
                           ))}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '6px' }}>
-                            <span>Tax</span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', borderTop: '1px solid rgba(0,0,0,0.03)', paddingTop: '4px' }}>
+                            <span>Associated Tax</span>
                             <span>${ocrResult.tax.toFixed(2)}</span>
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                          <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setOcrResult(null)}>Rescan</button>
-                          <button className="btn-primary" style={{ flex: 1 }} onClick={handleSaveOCRExpense}>Confirm & Split</button>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                          <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setOcrResult(null)}>Clear</button>
+                          <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleSaveOCRExpense}>Confirm Split</button>
                         </div>
                       </div>
                     )}
@@ -1259,25 +1285,25 @@ export default function App() {
               {showAddExpenseModal && (
                 <div style={{
                   position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(5,5,8,0.85)', backdropFilter: 'blur(10px)',
+                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
                   display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
                 }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '400px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '18px' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Add Expense</h3>
-                      <X size={20} className="cursor-pointer" onClick={() => setShowAddExpenseModal(false)} />
+                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Record Transaction</h3>
+                      <X size={18} className="cursor-pointer" onClick={() => setShowAddExpenseModal(false)} />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       <div>
-                        <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>Title</label>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Title description</label>
                         <input type="text" placeholder="e.g. WiFi Bill, Electricity" value={newExpTitle} onChange={e => setNewExpTitle(e.target.value)} style={{ marginTop: '4px' }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>Total Amount ($)</label>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Total cost ($)</label>
                         <input type="number" placeholder="0.00" value={newExpAmount} onChange={e => setNewExpAmount(e.target.value)} style={{ marginTop: '4px' }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>Paid By</label>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Payer</label>
                         <select value={newExpPayer} onChange={e => setNewExpPayer(e.target.value)} style={{ marginTop: '4px' }}>
                           {homemates.map(h => (
                             <option key={h.id} value={h.id}>{h.name}</option>
@@ -1285,23 +1311,23 @@ export default function App() {
                         </select>
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>Split Mode</label>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Split Formula</label>
                         <select value={newExpSplit} onChange={e => setNewExpSplit(e.target.value as any)} style={{ marginTop: '4px' }}>
-                          <option value="equal">Split Equally</option>
-                          <option value="custom">Split Custom</option>
+                          <option value="equal">Divide Equally</option>
+                          <option value="custom">Divide Custom</option>
                         </select>
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>Shareholders (Visibility)</label>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Included Homemates</label>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
                           {homemates.map(h => (
                             <button
                               key={h.id}
                               style={{
-                                padding: '6px 10px', fontSize: '0.8rem', borderRadius: '8px',
-                                border: '1px solid var(--glass-border)',
-                                background: newExpVisibility.includes(h.id) ? 'var(--accent-purple)' : 'var(--glass-bg)',
-                                color: 'white'
+                                padding: '5px 8px', fontSize: '0.72rem', borderRadius: '6px',
+                                border: '1px solid rgba(0,0,0,0.06)',
+                                background: newExpVisibility.includes(h.id) ? 'var(--accent-purple)' : 'rgba(0,0,0,0.02)',
+                                color: newExpVisibility.includes(h.id) ? 'white' : '#475569'
                               }}
                               onClick={() => {
                                 if (newExpVisibility.includes(h.id)) {
@@ -1311,15 +1337,15 @@ export default function App() {
                                 }
                               }}
                             >
-                              {h.name.split(' ')[0]}
+                              {h.name}
                             </button>
                           ))}
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                        <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setShowAddExpenseModal(false)}>Cancel</button>
-                        <button className="btn-primary" style={{ flex: 1 }} onClick={handleAddManualExpense}>Add Expense</button>
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                        <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setShowAddExpenseModal(false)}>Cancel</button>
+                        <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleAddManualExpense}>Add Bill</button>
                       </div>
                     </div>
                   </div>
@@ -1329,21 +1355,21 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 5: CHAT (SECURED END-TO-END ENCRYPTED HOME CHAT) */}
+          {/* TAB 5: CHAT (COLLABORATIVE MESSAGING) */}
           {activeTab === 'chat' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '620px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--glass-border)', paddingBottom: '10px', marginBottom: '14px' }}>
-                <Users size={18} style={{ color: 'var(--accent-purple)' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '8px', marginBottom: '12px' }}>
+                <Users size={16} style={{ color: 'var(--accent-purple)' }} />
                 <div>
-                  <h2 style={{ fontSize: '1.05rem', fontWeight: 800 }}>Household Chat</h2>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent-emerald)' }}></span>
-                    End-to-End Encrypted
+                  <h2 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>Household Chatroom</h2>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-emerald)' }}></span>
+                    Double Ratchet Encryption Active
                   </span>
                 </div>
               </div>
 
-              {/* Message History list */}
+              {/* Chat messages */}
               <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingRight: '4px' }}>
                 {chatMessages.map(msg => {
                   const isMe = msg.senderId === currentUser.id;
@@ -1353,9 +1379,9 @@ export default function App() {
                   if (isSystem) {
                     return (
                       <div key={msg.id} style={{
-                        alignSelf: 'center', background: 'rgba(255,255,255,0.03)', 
-                        padding: '6px 12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
-                        fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', margin: '8px 0', textAlign: 'center'
+                        alignSelf: 'center', background: 'rgba(0,0,0,0.02)', 
+                        padding: '4px 10px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.03)',
+                        fontSize: '0.72rem', color: '#64748b', margin: '6px 0', textAlign: 'center', fontWeight: 500
                       }}>
                         {msg.text}
                       </div>
@@ -1369,21 +1395,21 @@ export default function App() {
                     >
                       {!isMe && (
                         <div style={{ 
-                          fontSize: '0.7rem', 
+                          fontSize: '0.68rem', 
                           fontWeight: 700, 
-                          color: sender?.color || 'white',
-                          marginBottom: '4px'
+                          color: sender?.color || '#000000',
+                          marginBottom: '2px'
                         }}>
                           {sender?.name}
                         </div>
                       )}
                       <div>{msg.text}</div>
                       <span style={{ 
-                        fontSize: '0.62rem', 
-                        color: 'rgba(255,255,255,0.4)', 
+                        fontSize: '0.6rem', 
+                        color: isMe ? 'rgba(255,255,255,0.6)' : '#94a3b8', 
                         display: 'block', 
                         textAlign: 'right',
-                        marginTop: '4px'
+                        marginTop: '3px'
                       }}>
                         {msg.timestamp}
                       </span>
@@ -1393,21 +1419,22 @@ export default function App() {
                 <div ref={chatEndRef} />
               </div>
 
-              {/* Chat Input row */}
-              <div style={{ display: 'flex', gap: '10px', marginTop: 'auto', borderTop: '1px solid var(--glass-border)', paddingTop: '12px' }}>
+              {/* Chat controls */}
+              <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', borderTop: '1px solid rgba(0,0,0,0.04)', paddingTop: '10px' }}>
                 <input 
                   type="text" 
                   placeholder="Message homemates..." 
                   value={chatInput} 
                   onChange={e => setChatInput(e.target.value)} 
                   onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
+                  style={{ padding: '10px 12px' }}
                 />
                 <button 
                   className="btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px' }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 12px' }}
                   onClick={handleSendMessage}
                 >
-                  <Send size={18} />
+                  <Send size={16} />
                 </button>
               </div>
             </div>
