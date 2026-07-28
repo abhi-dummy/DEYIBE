@@ -738,9 +738,14 @@ export default function App() {
         });
         if (error) throw error;
         
-        if (data?.user) {
-          // Bypassed manually profiles table inserts. Database trigger handle_new_user does it safely!
-          alert('Verification code sent! (Note: You can close the verification page and log in directly; email confirmation is bypassed for dev ease).');
+        if (data?.session) {
+          setSession(data.session);
+          if (data.user) {
+            fetchUserProfile(data.user.id);
+          }
+          setViewLanding(false);
+        } else if (data?.user) {
+          alert('Verification link sent! Note: If email limits are hit or the redirect link fails, you can turn off "Confirm email" in Supabase Auth settings for instant login, or try signing in directly.');
           setAuthEmail('');
           setAuthPassword('');
           setAuthName('');
