@@ -1,0 +1,481 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.95);
+  background-color: #050508;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Glassmorphism Variables */
+  --bg-gradient: radial-gradient(125% 125% at 50% 10%, #050508 30%, #0d0f1a 100%);
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-bg-hover: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --glass-border-focus: rgba(255, 255, 255, 0.15);
+  --glass-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
+  --glass-blur: blur(24px);
+
+  /* Brand Accents */
+  --accent-purple: #8b5cf6;
+  --accent-purple-glow: rgba(139, 92, 246, 0.35);
+  --accent-blue: #3b82f6;
+  --accent-blue-glow: rgba(59, 130, 246, 0.35);
+  --accent-emerald: #10b981;
+  --accent-emerald-glow: rgba(16, 185, 129, 0.35);
+  --accent-rose: #f43f5e;
+  --accent-rose-glow: rgba(244, 63, 94, 0.35);
+  --accent-amber: #f59e0b;
+  --accent-amber-glow: rgba(245, 158, 11, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--bg-gradient);
+  overflow-x: hidden;
+}
+
+/* Background blob animations */
+.bg-blobs {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.18;
+  mix-blend-mode: screen;
+  animation: float 25s infinite alternate ease-in-out;
+}
+
+.blob-1 {
+  width: 400px;
+  height: 400px;
+  background: var(--accent-purple);
+  top: -10%;
+  left: -10%;
+  animation-duration: 20s;
+}
+
+.blob-2 {
+  width: 450px;
+  height: 450px;
+  background: var(--accent-blue);
+  bottom: 10%;
+  right: -10%;
+  animation-duration: 25s;
+}
+
+.blob-3 {
+  width: 350px;
+  height: 350px;
+  background: var(--accent-rose);
+  top: 40%;
+  left: 30%;
+  animation-duration: 18s;
+}
+
+@keyframes float {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(60px, -40px) scale(1.1);
+  }
+  100% {
+    transform: translate(-30px, 50px) scale(0.95);
+  }
+}
+
+/* Device Shell Layout (Mobile Mockup in Center on Desktop) */
+.app-container {
+  position: relative;
+  z-index: 1;
+  max-width: 480px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background: rgba(13, 15, 26, 0.6);
+  border-left: 1px solid var(--glass-border);
+  border-right: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 100px rgba(0, 0, 0, 0.8);
+}
+
+@media (min-width: 481px) {
+  body {
+    background-color: #020204;
+  }
+  .app-container {
+    min-height: 92vh;
+    margin: 4vh auto;
+    border-radius: 40px;
+    border: 1px solid var(--glass-border);
+    overflow: hidden;
+    height: 850px;
+  }
+}
+
+/* Navigation Shell & Headers */
+.app-header {
+  padding: 18px 20px;
+  background: rgba(13, 15, 26, 0.4);
+  border-bottom: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.7) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-subtitle {
+  font-size: 0.65rem;
+  color: var(--accent-purple);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: 700;
+  margin-top: -3px;
+}
+
+.pulse-badge {
+  position: relative;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  transition: all 0.2s ease;
+}
+
+.pulse-badge:hover {
+  background: var(--glass-bg-hover);
+  transform: scale(1.05);
+}
+
+.pulse-indicator {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-rose);
+  box-shadow: 0 0 10px var(--accent-rose);
+  animation: pulse-ring 1.8s infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(244, 63, 94, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0);
+  }
+}
+
+/* App Main Content Area */
+.app-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  padding-bottom: 90px; /* Safe space for nav bar */
+}
+
+/* Glass Card */
+.glass-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  padding: 20px;
+  margin-bottom: 16px;
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: var(--glass-border-focus);
+  background: var(--glass-bg-hover);
+  transform: translateY(-2px);
+}
+
+/* Custom Floating Elements for Shelf Refrigerator Door */
+.fridge-door {
+  background: radial-gradient(100% 100% at 50% 0%, rgba(25, 27, 44, 0.6) 0%, rgba(13, 15, 26, 0.8) 100%);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  min-height: 480px;
+  position: relative;
+  padding: 16px;
+  box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.fridge-magnet {
+  background: linear-gradient(135deg, #fff3b0 0%, #ffd460 100%);
+  color: #1a1a1a;
+  padding: 14px;
+  border-radius: 4px;
+  box-shadow: 3px 5px 15px rgba(0, 0, 0, 0.35);
+  width: calc(50% - 8px);
+  min-height: 110px;
+  transform: rotate(-1.5deg);
+  transition: all 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+  font-family: 'Caveat', cursive;
+  font-size: 1.45rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  position: relative;
+}
+
+.fridge-magnet:nth-child(even) {
+  transform: rotate(2deg);
+  background: linear-gradient(135deg, #ffc4d6 0%, #ff85a1 100%);
+}
+
+.fridge-magnet:nth-child(3n) {
+  transform: rotate(-3deg);
+  background: linear-gradient(135deg, #d8f3dc 0%, #b7e4c7 100%);
+}
+
+.fridge-magnet:nth-child(4n) {
+  transform: rotate(1deg);
+  background: linear-gradient(135deg, #e0aaff 0%, #c77dff 100%);
+}
+
+.fridge-magnet.stocked {
+  opacity: 0.65;
+  filter: grayscale(15%);
+}
+
+.fridge-magnet.stocked .magnet-text {
+  text-decoration: line-through;
+  text-decoration-thickness: 3px;
+  text-decoration-color: rgba(0, 0, 0, 0.6);
+}
+
+.magnet-priority {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.15);
+  width: fit-content;
+  font-family: sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Bottom Navigation Bar */
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 76px;
+  background: rgba(13, 15, 26, 0.75);
+  border-top: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0 10px;
+  z-index: 10;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+  padding: 10px 0;
+  gap: 4px;
+}
+
+.nav-item:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.nav-item.active {
+  color: var(--accent-purple);
+  filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.4));
+}
+
+.nav-item svg {
+  width: 22px;
+  height: 22px;
+  transition: transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+.nav-item.active svg {
+  transform: translateY(-2px) scale(1.1);
+}
+
+/* Premium Form Elements */
+input, select, textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  color: white;
+  font-family: inherit;
+  font-size: 0.95rem;
+  outline: none;
+  transition: all 0.25s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.2);
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-purple) 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  box-shadow: 0 4px 15px var(--accent-purple-glow);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+}
+
+.btn-secondary {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: white;
+  padding: 12px 20px;
+}
+
+.btn-secondary:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-focus);
+}
+
+/* Run Activity Pulse Dot */
+.run-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  box-shadow: 0 0 8px var(--accent-blue);
+  display: inline-block;
+  animation: run-glow 1.5s infinite;
+}
+
+@keyframes run-glow {
+  0% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.7; }
+}
+
+/* Chat bubble styling */
+.chat-bubble {
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  margin-bottom: 12px;
+  position: relative;
+  font-size: 0.92rem;
+}
+
+.chat-bubble.sent {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--accent-purple) 0%, #7c3aed 100%);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble.received {
+  align-self: flex-start;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: rgba(255, 255, 255, 0.95);
+  border-bottom-left-radius: 4px;
+}
+
+/* Scrollbar customization */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
