@@ -224,11 +224,118 @@ export default function App() {
     };
   }, [dbSynced]);
 
+  // Helper to seed initial mock values to new Supabase tables
+  const seedSupabaseDatabase = async () => {
+    console.log('Seeding initial mockup tables...');
+    
+    // Seed shelf items
+    for (const item of initialShelfItems) {
+      await safeDbWrite(() => supabase.from('shelf_items').insert({
+        id: item.id,
+        name: item.name,
+        status: item.status,
+        priority: item.priority,
+        added_by: item.addedById,
+        visibility: item.visibility
+      }));
+    }
+
+    // Seed tasks
+    for (const task of initialTasks) {
+      await safeDbWrite(() => supabase.from('tasks').insert({
+        id: task.id,
+        title: task.title,
+        assigned_to: task.assignedTo,
+        due_date: task.dueDate,
+        completed: task.completed,
+        frequency: task.frequency
+      }));
+    }
+
+    // Seed chat messages
+    for (const msg of initialChatMessages) {
+      await safeDbWrite(() => supabase.from('chat_messages').insert({
+        id: msg.id,
+        sender_id: msg.senderId,
+        text: msg.text
+      }));
+    }
+
+    // Seed expenses
+    for (const exp of initialExpenses) {
+      await safeDbWrite(() => supabase.from('expenses').insert({
+        id: exp.id,
+        title: exp.title,
+        amount: exp.amount,
+        payer_id: exp.payerId,
+        split_method: exp.splitMethod,
+        shares: exp.shares
+      }));
+    }
+  };
+
   // Load all tables helper
   const loadFromSupabase = async () => {
     // Load shelf
     const { data: shelf } = await supabase.from('shelf_items').select('*').order('created_at', { ascending: false });
-    if (shelf && shelf.length > 0) {
+    // Load chat
+    const { data: chat } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true });
+    // Load expenses
+    const { data: exp } = await supabase.from('expenses').select('*').order('date', { ascending: false });
+    // Load tasks
+    const { data: tsk } = await supabase.from('tasks').select('*');
+
+    // If database is completely empty, seed it!
+    const isDbEmpty = (!shelf || shelf.length === 0) && (!chat || chat.length === 0);
+    if (isDbEmpty) {
+      await seedSupabaseDatabase();
+      // Reload after seeding
+      const { data: s } = await supabase.from('shelf_items').select('*').order('created_at', { ascending: false });
+      const { data: c } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true });
+      const { data: e } = await supabase.from('expenses').select('*').order('date', { ascending: false });
+      const { data: t } = await supabase.from('tasks').select('*');
+      
+      if (s) setShelfItems(s.map(item => ({
+        id: item.id,
+        name: item.name,
+        status: item.status,
+        priority: item.priority,
+        addedById: item.added_by || '1',
+        visibility: item.visibility || ['1', '2', '3', '4'],
+        timestamp: 'Synced'
+      })));
+
+      if (c) setChatMessages(c.map(m => ({
+        id: m.id,
+        senderId: m.sender_id,
+        text: m.text,
+        timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      })));
+
+      if (e) setExpenses(e.map(ex => ({
+        id: ex.id,
+        title: ex.title,
+        amount: Number(ex.amount),
+        payerId: ex.payer_id,
+        splitMethod: ex.split_method,
+        shares: ex.shares,
+        date: new Date(ex.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+        visibility: ['1', '2', '3', '4']
+      })));
+
+      if (t) setTasks(t.map(tk => ({
+        id: tk.id,
+        title: tk.title,
+        assignedTo: tk.assigned_to || ['1'],
+        dueDate: tk.due_date,
+        completed: tk.completed,
+        frequency: tk.frequency
+      })));
+
+      return;
+    }
+
+    if (shelf) {
       setShelfItems(shelf.map(s => ({
         id: s.id,
         name: s.name,
@@ -240,9 +347,7 @@ export default function App() {
       })));
     }
 
-    // Load chat
-    const { data: chat } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true });
-    if (chat && chat.length > 0) {
+    if (chat) {
       setChatMessages(chat.map(m => ({
         id: m.id,
         senderId: m.sender_id,
@@ -251,9 +356,7 @@ export default function App() {
       })));
     }
 
-    // Load expenses
-    const { data: exp } = await supabase.from('expenses').select('*').order('date', { ascending: false });
-    if (exp && exp.length > 0) {
+    if (exp) {
       setExpenses(exp.map(e => ({
         id: e.id,
         title: e.title,
@@ -266,9 +369,7 @@ export default function App() {
       })));
     }
 
-    // Load tasks
-    const { data: tsk } = await supabase.from('tasks').select('*');
-    if (tsk && tsk.length > 0) {
+    if (tsk) {
       setTasks(tsk.map(t => ({
         id: t.id,
         title: t.title,
