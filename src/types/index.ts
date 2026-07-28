@@ -78,3 +78,14 @@ export interface PulseAlert {
   timestamp: string;
   read: boolean;
 }
+
+export interface InventoryItem {
+  id: string;
+  kompaId: string;
+  name: string;
+  imageUrl?: string;
+  itemUrl?: string;
+  price?: number;
+  addedBy?: string;
+  createdAt?: string;
+}

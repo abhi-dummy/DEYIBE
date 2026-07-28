@@ -24,12 +24,20 @@ import {
   AlertCircle,
   Upload,
   LogOut,
-  Layers
+  Layers,
+  Settings,
+  Image as ImageIcon,
+  ChevronRight,
+  ShoppingBag,
+  ExternalLink,
+  Flame,
+  Coffee,
+  Volume2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { createWorker } from 'tesseract.js';
 import { supabase } from './utils/supabaseClient';
-import type { Homemate, Expense, ShelfItem, ChatMessage, Task, PulseAlert, RunSession, RunRequest, Kompa } from './types';
+import type { Homemate, Expense, ShelfItem, ChatMessage, Task, PulseAlert, RunSession, RunRequest, Kompa, InventoryItem } from './types';
 import { getOptimizedDebts, calculateBalances } from './utils/settleEngine';
 
 interface FlowLog {
@@ -40,6 +48,10 @@ interface FlowLog {
 }
 
 export default function App() {
+  // SaaS Landing Page / Auth Switcher State
+  const [viewLanding, setViewLanding] = useState<boolean>(true);
+  const [activePersona, setActivePersona] = useState<'shopper' | 'chore' | 'finance'>('shopper');
+
   // Authentication & Session States
   const [session, setSession] = useState<any | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'forgot_password' | 'verify_otp'>('login');
@@ -55,13 +67,15 @@ export default function App() {
   const [activeKompa, setActiveKompa] = useState<Kompa | null>(null);
   const [kompaNameInput, setKompaNameInput] = useState('');
   const [kompaCodeInput, setKompaCodeInput] = useState('');
-
   
   // App Core States
   const [activeTab, setActiveTab] = useState<'home' | 'shelf' | 'run' | 'split' | 'chat'>('home');
   const [kompaMembers, setKompaMembers] = useState<Homemate[]>([]);
   const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
   const activeTabRef = useRef(activeTab);
+
+  // Shelf Section Sub-Tab
+  const [shelfSubTab, setShelfSubTab] = useState<'catalog' | 'inventory'>('catalog');
 
   // Synced States
   const [shelfItems, setShelfItems] = useState<ShelfItem[]>([]);
@@ -70,11 +84,16 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [pulseAlerts, setPulseAlerts] = useState<PulseAlert[]>([]);
   const [activeRun, setActiveRun] = useState<RunSession | null>(null);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
 
   // DB Sync indicator status
   const [dbSynced, setDbSynced] = useState<boolean>(false);
   const [dbLoading, setDbLoading] = useState<boolean>(false);
   const [showDbAlert, setShowDbAlert] = useState<boolean>(false);
+
+  // Real-time Chat Typing States
+  const [typingUser, setTypingUser] = useState<string | null>(null);
+  const typingTimeoutRef = useRef<any>(null);
 
   // UI Flow Logs (Timeline)
   const [flowLogs, setFlowLogs] = useState<FlowLog[]>([]);
@@ -90,12 +109,13 @@ export default function App() {
   const [showOCRModal, setShowOCRModal] = useState(false);
   const [showShelfDetailsModal, setShowShelfDetailsModal] = useState<ShelfItem | null>(null);
   const [showAddChoreModal, setShowAddChoreModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
 
   // Form Inputs
   const [newShelfName, setNewShelfName] = useState('');
   const [newShelfPriority, setNewShelfPriority] = useState<'high' | 'medium' | 'low'>('medium');
   const [newShelfVisibility] = useState<string[]>([]);
-
 
   const [newExpTitle, setNewExpTitle] = useState('');
   const [newExpAmount, setNewExpAmount] = useState('');
@@ -105,6 +125,7 @@ export default function App() {
 
   const [chatInput, setChatInput] = useState('');
   const [newRequestName, setNewRequestName] = useState('');
+  const [customStoreInput, setCustomStoreInput] = useState('');
 
   // Chore Creation Form
   const [newChoreTitle, setNewChoreTitle] = useState('');
@@ -112,6 +133,12 @@ export default function App() {
   const [newChoreFrequency, setNewChoreFrequency] = useState<'once' | 'daily' | 'weekly' | 'monthly'>('weekly');
   const [newChoreType, setNewChoreType] = useState<'general' | 'trash' | 'kitchen'>('general');
   const [newChoreAssignedTo, setNewChoreAssignedTo] = useState<string[]>([]);
+
+  // Wishlist/Inventory Form
+  const [newInvName, setNewInvName] = useState('');
+  const [newInvPrice, setNewInvPrice] = useState('');
+  const [newInvUrl, setNewInvUrl] = useState('');
+  const [newInvCategory, setNewInvCategory] = useState<'vacuum' | 'coffee' | 'toaster' | 'speaker'>('coffee');
   
   // OCR Scan states
   const [ocrScanning, setOcrScanning] = useState(false);
@@ -148,6 +175,7 @@ export default function App() {
       setSession(session);
       if (session?.user) {
         fetchUserProfile(session.user.id);
+        setViewLanding(false);
       }
     });
 
@@ -155,10 +183,12 @@ export default function App() {
       setSession(session);
       if (session?.user) {
         fetchUserProfile(session.user.id);
+        setViewLanding(false);
       } else {
         setCurrentUserProfile(null);
         setJoinedKompas([]);
         setActiveKompa(null);
+        setViewLanding(true);
       }
     });
 
@@ -175,7 +205,6 @@ export default function App() {
         .single();
       
       if (error && error.code === 'PGRST116') {
-        // Profile doesn't exist yet, auto-create it
         const fallbackName = session?.user?.email?.split('@')[0] || 'User';
         const newProfile = {
           id: userId,
@@ -220,7 +249,6 @@ export default function App() {
           ownerId: m.kompas.owner_id
         }));
         setJoinedKompas(kompaList);
-        // Set first Kompa active by default
         setActiveKompa(kompaList[0]);
         setDbSynced(true);
       } else {
@@ -346,6 +374,21 @@ export default function App() {
         })));
       }
 
+      // Load inventory items
+      const { data: inv } = await supabase.from('inventory_items').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
+      if (inv) {
+        setInventoryItems(inv.map(i => ({
+          id: i.id,
+          kompaId: i.kompa_id,
+          name: i.name,
+          imageUrl: i.image_url,
+          itemUrl: i.item_url,
+          price: Number(i.price),
+          addedBy: i.added_by,
+          createdAt: 'Synced'
+        })));
+      }
+
       setDbSynced(true);
     } catch (err) {
       console.warn('Failed loading Kompa data', err);
@@ -421,13 +464,46 @@ export default function App() {
       })
       .subscribe();
 
+    // Subscribe to typing broadcast
+    const typingChannel = supabase
+      .channel(`typing_${activeKompa.id}`)
+      .on('broadcast', { event: 'typing' }, (payload: any) => {
+        if (payload.payload && payload.payload.name !== currentUserProfile?.name) {
+          setTypingUser(payload.payload.isTyping ? payload.payload.name : null);
+        }
+      })
+      .subscribe();
+
+    // Subscribe to inventory items
+    const invChannel = supabase
+      .channel('kompa_inv_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
+        const { data } = await supabase.from('inventory_items').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
+        if (data) {
+          setInventoryItems(data.map(i => ({
+            id: i.id,
+            kompaId: i.kompa_id,
+            name: i.name,
+            imageUrl: i.image_url,
+            itemUrl: i.item_url,
+            price: Number(i.price),
+            addedBy: i.added_by,
+            createdAt: 'Synced'
+          })));
+        }
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(chatChannel);
       supabase.removeChannel(taskChannel);
       supabase.removeChannel(shelfChannel);
+      supabase.removeChannel(typingChannel);
+      supabase.removeChannel(invChannel);
     };
   }, [dbSynced, activeKompa, currentUserProfile]);
 
+  // Auth Operations
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authEmail) return;
@@ -470,7 +546,7 @@ export default function App() {
         const { error } = await supabase.auth.signInWithOtp({
           email: authEmail,
           options: {
-            shouldCreateUser: false // only registered users can request OTP
+            shouldCreateUser: false
           }
         });
         if (error) throw error;
@@ -484,8 +560,6 @@ export default function App() {
           type: 'email'
         });
         if (error) throw error;
-        
-        // Success (user logged in via OTP!)
         setAuthOtpCode('');
         setAuthMode('login');
       }
@@ -496,20 +570,19 @@ export default function App() {
     }
   };
 
-
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setSession(null);
     setCurrentUserProfile(null);
     setJoinedKompas([]);
     setActiveKompa(null);
+    setViewLanding(true);
   };
 
   // Create a new Kompa
   const handleCreateKompa = async () => {
     if (!kompaNameInput.trim() || !currentUserProfile) return;
 
-    // Check limit constraint: Max 3 Kompas
     const userOwnedCount = joinedKompas.filter(k => k.ownerId === currentUserProfile.id).length;
     if (userOwnedCount >= 3) {
       alert('You have reached the limit of 3 Kompa creations. Please delete or leave one of your owned Kompas to create a new one.');
@@ -518,7 +591,6 @@ export default function App() {
 
     try {
       setDbLoading(true);
-      // Generate 6-digit random code
       const uniqueCode = Math.floor(100000 + Math.random() * 900000).toString();
 
       const { data: newKompa, error } = await supabase
@@ -534,14 +606,13 @@ export default function App() {
       if (error) throw error;
 
       if (newKompa) {
-        // Insert into membership mapping
         await supabase.from('kompa_members').insert({
           kompa_id: newKompa.id,
           profile_id: currentUserProfile.id
         });
 
-        // Refresh list
         setKompaNameInput('');
+        setShowSettingsModal(false);
         fetchUserKompas(currentUserProfile.id);
       }
     } catch (err: any) {
@@ -558,7 +629,6 @@ export default function App() {
     try {
       setDbLoading(true);
       
-      // Query Kompa
       const { data: kompa, error } = await supabase
         .from('kompas')
         .select('*')
@@ -570,7 +640,6 @@ export default function App() {
         return;
       }
 
-      // Check if already a member
       const { data: existing } = await supabase
         .from('kompa_members')
         .select('*')
@@ -584,13 +653,13 @@ export default function App() {
         return;
       }
 
-      // Join
       await supabase.from('kompa_members').insert({
         kompa_id: kompa.id,
         profile_id: currentUserProfile.id
       });
 
       setKompaCodeInput('');
+      setShowSettingsModal(false);
       fetchUserKompas(currentUserProfile.id);
     } catch (err: any) {
       alert(err.message || 'Error joining Kompa.');
@@ -611,16 +680,15 @@ export default function App() {
         const confirmDelete = window.confirm('Are you sure you want to permanently delete this Kompa? This will clear all shared inventory, logs, chats, and runs for everyone.');
         if (!confirmDelete) return;
 
-        // Delete kompa
         await supabase.from('kompas').delete().eq('id', activeKompa.id);
       } else {
         const confirmLeave = window.confirm('Are you sure you want to leave this Kompa?');
         if (!confirmLeave) return;
 
-        // Leave
         await supabase.from('kompa_members').delete().eq('kompa_id', activeKompa.id).eq('profile_id', currentUserProfile.id);
       }
 
+      setShowSettingsModal(false);
       fetchUserKompas(currentUserProfile.id);
     } catch (err: any) {
       console.error(err);
@@ -671,9 +739,40 @@ export default function App() {
     setPulseAlerts(prev => [newAlert, ...prev]);
   };
 
+  // Chat Input Typing broadcast logic
+  const handleChatInputChange = (val: string) => {
+    setChatInput(val);
+    if (!activeKompa || !currentUserProfile || !dbSynced) return;
+
+    const typingChannel = supabase.channel(`typing_${activeKompa.id}`);
+    typingChannel.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { name: currentUserProfile.name, isTyping: true }
+    });
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      typingChannel.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { name: currentUserProfile.name, isTyping: false }
+      });
+    }, 1500);
+  };
+
   // Send Chat message
   const handleSendMessage = async () => {
     if (!chatInput.trim() || !activeKompa || !currentUserProfile) return;
+
+    // Clear typing timeout and broadcast typing stopped
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    const typingChannel = supabase.channel(`typing_${activeKompa.id}`);
+    typingChannel.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { name: currentUserProfile.name, isTyping: false }
+    });
 
     const newMessage: ChatMessage = {
       id: `m_${Date.now()}`,
@@ -736,7 +835,7 @@ export default function App() {
     addPulse('Account Settled', `${debtor} paid ${creditor} $${amount.toFixed(2)}.`, 'success');
   };
 
-  // Buzz Roommate (Notification Ping)
+  // Buzz Roommate
   const handleBuzz = (target: Homemate) => {
     if (!currentUserProfile) return;
     const text = `System notification: ${currentUserProfile.name} requested response from ${target.name}.`;
@@ -744,7 +843,7 @@ export default function App() {
     if (dbSynced && activeKompa) {
       safeDbWrite(() => supabase.from('chat_messages').insert({
         kompa_id: activeKompa.id,
-        sender_id: null, // System sender
+        sender_id: null,
         text
       }));
     }
@@ -833,7 +932,6 @@ export default function App() {
   // Delete shelf item
   const handleDeleteShelfItem = async (id: string) => {
     const item = shelfItems.find(i => i.id === id);
-
     setShelfItems(prev => prev.filter(i => i.id !== id));
     setShowShelfDetailsModal(null);
 
@@ -875,7 +973,6 @@ export default function App() {
       }));
     }
 
-    // Reset fields
     setNewChoreTitle('');
     setNewChoreDueDate('');
     setNewChoreAssignedTo([]);
@@ -905,7 +1002,6 @@ export default function App() {
     }
 
     if (nextCompletedVal) {
-      // Trigger appropriate animated celebration clip
       if (task.choreType === 'trash') {
         setChoreAnimationType('trash');
       } else if (task.choreType === 'kitchen') {
@@ -921,18 +1017,17 @@ export default function App() {
     }
   };
 
-  // Handle closing chore animation overlay
+  // Close chore animation overlay
   useEffect(() => {
     if (choreAnimationType) {
       const timer = setTimeout(() => {
         setChoreAnimationType(null);
-        // Fire confetti celebration at the end of the graphic animation
         confetti({
           particleCount: 80,
           spread: 70,
           origin: { y: 0.65 }
         });
-      }, 2500); // 2.5 seconds clip
+      }, 2500);
       return () => clearTimeout(timer);
     }
   }, [choreAnimationType]);
@@ -1189,7 +1284,6 @@ export default function App() {
       }));
     }
 
-    // Auto-restock matching items
     const itemNamesLower = ocrResult.items.map((i: any) => i.name.toLowerCase());
     setShelfItems(prev => prev.map(s => {
       const match = itemNamesLower.some((name: string) => name.includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(name));
@@ -1250,13 +1344,48 @@ export default function App() {
     }
   };
 
+  // Add Wishlist/Inventory item
+  const handleAddInventory = async () => {
+    if (!newInvName.trim() || !activeKompa || !currentUserProfile) return;
+    const priceVal = parseFloat(newInvPrice) || 0;
+
+    const newItem: InventoryItem = {
+      id: `inv_${Date.now()}`,
+      kompaId: activeKompa.id,
+      name: newInvName,
+      imageUrl: newInvCategory, // store selected category code as image key
+      itemUrl: newInvUrl,
+      price: priceVal,
+      addedBy: currentUserProfile.name
+    };
+
+    setInventoryItems(prev => [newItem, ...prev]);
+    setShowAddInventoryModal(false);
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('inventory_items').insert({
+        kompa_id: activeKompa.id,
+        name: newInvName,
+        image_url: newInvCategory,
+        item_url: newInvUrl,
+        price: priceVal,
+        added_by: currentUserProfile.id
+      }));
+    }
+
+    logFlow(`${currentUserProfile.name} added asset "${newInvName}" to shared wishlist`, 'stocked');
+    setNewInvName('');
+    setNewInvPrice('');
+    setNewInvUrl('');
+  };
+
   const optimizedDebts = getOptimizedDebts(expenses, kompaMembers);
   const netBalances = calculateBalances(expenses, kompaMembers);
 
   // Render initials avatar helper
   const renderInitialsAvatar = (member: Homemate, size: number = 38) => {
     return (
-      <div style={{
+      <div key={member.id} style={{
         width: `${size}px`,
         height: `${size}px`,
         borderRadius: '50%',
@@ -1293,7 +1422,203 @@ export default function App() {
     }
   };
 
-  // AUTHENTICATION SCREEN VIEW
+  // Render realistic Airbnb-style vector logo for runs
+  const renderRetailerLogo = (storeName: string) => {
+    const isCostco = storeName.toLowerCase().includes('costco');
+    const isWalmart = storeName.toLowerCase().includes('walmart');
+
+    if (isCostco) {
+      return (
+        <svg width="46" height="46" viewBox="0 0 100 100" style={{ borderRadius: '8px' }}>
+          <rect width="100" height="100" fill="#005ea6" />
+          <text x="50%" y="45%" dominantBaseline="middle" textAnchor="middle" fill="#e31b23" fontSize="22" fontWeight="900" fontFamily="Impact, sans-serif">COSTCO</text>
+          <text x="50%" y="75%" dominantBaseline="middle" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold" letterSpacing="1">WHOLESALE</text>
+        </svg>
+      );
+    } else if (isWalmart) {
+      return (
+        <svg width="46" height="46" viewBox="0 0 100 100" style={{ borderRadius: '8px' }}>
+          <rect width="100" height="100" fill="#0071ce" />
+          <circle cx="50" cy="50" r="14" fill="none" />
+          {/* Spark sunburst */}
+          <path d="M 50,15 L 50,28 M 50,72 L 50,85 M 15,50 L 28,50 M 72,50 L 85,50 M 25,25 L 34,34 M 66,66 L 75,75 M 75,25 L 66,34 M 34,66 L 25,75" stroke="#ffc220" strokeWidth="6" strokeLinecap="round" />
+        </svg>
+      );
+    } else {
+      return (
+        <div style={{
+          width: '46px', height: '46px', borderRadius: '8px', 
+          background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white'
+        }}>
+          <ShoppingBag size={22} />
+        </div>
+      );
+    }
+  };
+
+  // Render Wishlist Item Category Clipart
+  const renderWishlistClipart = (category: string) => {
+    switch (category) {
+      case 'vacuum':
+        return (
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(30, 58, 138, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1e3a8a' }}>
+            <Flame size={22} />
+          </div>
+        );
+      case 'coffee':
+        return (
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(180, 83, 9, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#b45309' }}>
+            <Coffee size={22} />
+          </div>
+        );
+      case 'speaker':
+        return (
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(4, 120, 87, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#047857' }}>
+            <Volume2 size={22} />
+          </div>
+        );
+      default:
+        return (
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(37, 99, 235, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
+            <Layers size={22} />
+          </div>
+        );
+    }
+  };
+
+  // SAAS STYLE LANDING PAGE VIEW
+  if (viewLanding && (!session || !currentUserProfile)) {
+    return (
+      <>
+        <div className="bg-blobs">
+          <div className="blob blob-1"></div>
+          <div className="blob blob-2"></div>
+          <div className="blob blob-3"></div>
+        </div>
+
+        <div className="app-container" style={{ overflowY: 'hidden' }}>
+          
+          <header className="app-header" style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
+            <div className="brand-title" style={{ gap: '6px' }}>
+              <Layers size={18} style={{ color: '#2563eb' }} />
+              Deyibe
+            </div>
+            <button 
+              className="btn-primary" 
+              style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+              onClick={() => {
+                setViewLanding(false);
+                setAuthMode('login');
+              }}
+            >
+              Log In
+            </button>
+          </header>
+
+          <div className="app-content landing-container">
+            {/* Hero Section */}
+            <div style={{ textAlign: 'center', padding: '10px 0 20px 0' }}>
+              <div className="caption-badge">
+                <span>Introducing the slogan:</span>
+                <i>"Dabbulu Eyi Bhe!?"</i>
+              </div>
+
+              <h1 style={{ fontSize: '1.9rem', fontWeight: 800, lineHeight: 1.2, color: '#0f172a', letterSpacing: '-0.03em' }}>
+                Coordinating your room shouldn't feel like a chore.
+              </h1>
+              
+              <p style={{ fontSize: '0.88rem', color: '#475569', marginTop: '10px', lineHeight: 1.5, padding: '0 8px' }}>
+                The beautiful operating system for roommates. Sync grocery shopping, gamify chores with animations, scan bills, and settle balances in one place.
+              </p>
+
+              <button 
+                className="btn-primary" 
+                style={{ width: '80%', padding: '12px', marginTop: '16px', fontSize: '0.9rem' }}
+                onClick={() => {
+                  setViewLanding(false);
+                  setAuthMode('signup');
+                }}
+              >
+                Launch App Free
+              </button>
+            </div>
+
+            {/* Figma Style Slider Showcase */}
+            <div className="landing-card" style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '0.9rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', textAlign: 'center', marginBottom: '14px' }}>
+                See how Deyibe saves time
+              </h3>
+              
+              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginBottom: '16px' }}>
+                <button className={`persona-btn ${activePersona === 'shopper' ? 'active' : ''}`} onClick={() => setActivePersona('shopper')}>
+                  Shopping
+                </button>
+                <button className={`persona-btn ${activePersona === 'chore' ? 'active' : ''}`} onClick={() => setActivePersona('chore')}>
+                  Chores
+                </button>
+                <button className={`persona-btn ${activePersona === 'finance' ? 'active' : ''}`} onClick={() => setActivePersona('finance')}>
+                  Bills
+                </button>
+              </div>
+
+              {activePersona === 'shopper' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', animation: 'fadeIn 0.25s' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(37, 99, 235, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
+                    <ShoppingCart size={22} />
+                  </div>
+                  <h4 style={{ fontWeight: 800, fontSize: '0.95rem' }}>Abhi saves 30 minutes in-store</h4>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b', lineHeight: 1.4 }}>
+                    Abhi starts a Live Costco Run. Roommates receive a push alert instantly, allowing them to add items to the shopping list in real time while Abhi is in the aisles.
+                  </p>
+                </div>
+              )}
+
+              {activePersona === 'chore' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', animation: 'fadeIn 0.25s' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(4, 120, 87, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#047857' }}>
+                    <CheckSquare size={22} />
+                  </div>
+                  <h4 style={{ fontWeight: 800, fontSize: '0.95rem' }}>Sandeep makes house chores fun</h4>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b', lineHeight: 1.4 }}>
+                    Sandeep completes his garbage chores. Instead of typing in chat, checking it off displays a realistic SVG animation of garbage bags dropping into the container.
+                  </p>
+                </div>
+              )}
+
+              {activePersona === 'finance' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', animation: 'fadeIn 0.25s' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(180, 83, 9, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#b45309' }}>
+                    <DollarSign size={22} />
+                  </div>
+                  <h4 style={{ fontWeight: 800, fontSize: '0.95rem' }}>Riya splits costs in 1 click</h4>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b', lineHeight: 1.4 }}>
+                    Riya uploads a receipt photo. The built-in OCR scans the items, calculates tax, and suggests optimized splits without requiring manual calculators.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Feature Highlights Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="landing-card" style={{ padding: '14px', borderRadius: '14px' }}>
+                <h4 style={{ fontSize: '0.82rem', fontWeight: 800 }}>Realtime Sync</h4>
+                <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>WebSocket channels update chats and shelves live.</p>
+              </div>
+              <div className="landing-card" style={{ padding: '14px', borderRadius: '14px' }}>
+                <h4 style={{ fontSize: '0.82rem', fontWeight: 800 }}>Security First</h4>
+                <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>Supabase Row Level Security protects your private chats.</p>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </>
+    );
+  }
+
+  // STANDARD AUTHENTICATION MODAL VIEW
   if (!session || !currentUserProfile) {
     return (
       <>
@@ -1508,7 +1833,7 @@ export default function App() {
         <div className="blob blob-3"></div>
       </div>
 
-      {/* CHORE COMPLETION CELEBRATION FULL-SCREEN OVERLAYS */}
+      {/* CHORE CELEBRATION MODALS */}
       {choreAnimationType && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -1518,30 +1843,24 @@ export default function App() {
         }}>
           {choreAnimationType === 'trash' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-              {/* Garbage bags thrown to a dustbin graphic SVG */}
               <svg width="150" height="150" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
                 <defs>
                   <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
                     <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000" floodOpacity="0.15" />
                   </filter>
                 </defs>
-                {/* Dustbin Can body */}
                 <rect x="35" y="45" width="30" height="40" rx="4" fill="#64748b" filter="url(#shadow)" />
-                {/* Lid (closed container status initially) */}
                 <rect x="31" y="38" width="38" height="6" rx="2" fill="#475569" style={{
                   transformOrigin: '50px 38px',
                   animation: 'lidOpen 2.2s cubic-bezier(0.25, 1, 0.5, 1) infinite'
                 }} />
-                {/* Stripe textures */}
                 <line x1="41" y1="52" x2="41" y2="78" stroke="#475569" strokeWidth="2" strokeLinecap="round" />
                 <line x1="50" y1="52" x2="50" y2="78" stroke="#475569" strokeWidth="2" strokeLinecap="round" />
                 <line x1="59" y1="52" x2="59" y2="78" stroke="#475569" strokeWidth="2" strokeLinecap="round" />
                 
-                {/* Trash Bag falling in */}
                 <path d="M 40,0 C 35,5 35,12 42,15 C 45,16 55,16 58,15 C 65,12 65,5 60,0 C 53,5 47,5 40,0 Z" fill="#b45309" style={{
                   animation: 'bagDrop 2.2s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite'
                 }} />
-                {/* Knot tie on bag */}
                 <circle cx="50" cy="-4" r="3" fill="#92400e" style={{
                   animation: 'bagDropKnot 2.2s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite'
                 }} />
@@ -1551,12 +1870,9 @@ export default function App() {
             </div>
           )}
 
-          {/* UTENSILS OR KITCHEN CLEANING CELEBRATION */}
           {choreAnimationType === 'kitchen' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-              {/* Dishes scrubbing vector SVG */}
               <svg width="150" height="150" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
-                {/* Dish Plate */}
                 <circle cx="50" cy="50" r="30" fill="none" stroke="white" strokeWidth="3" style={{
                   animation: 'dishSpin 2s linear infinite'
                 }} />
@@ -1564,7 +1880,6 @@ export default function App() {
                   animation: 'dishSpin 2s linear infinite'
                 }} />
                 
-                {/* Sparkle star */}
                 <path d="M 50,15 L 53,24 L 62,27 L 53,30 L 50,39 L 47,30 L 38,27 L 47,24 Z" fill="#fbbf24" style={{
                   animation: 'sparkleFlash 1.5s ease-in-out infinite'
                 }} />
@@ -1573,7 +1888,6 @@ export default function App() {
                   animationDelay: '0.4s'
                 }} />
                 
-                {/* Foam / Soap bubbles */}
                 <circle cx="32" cy="65" r="5" fill="rgba(255,255,255,0.85)" />
                 <circle cx="68" cy="65" r="4" fill="rgba(255,255,255,0.95)" />
                 <circle cx="62" cy="72" r="6" fill="rgba(255,255,255,0.75)" style={{
@@ -1671,9 +1985,9 @@ export default function App() {
             )}
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             
-            {/* 6 Glowing Status indicator */}
+            {/* Glowing Status indicator */}
             <div 
               style={{
                 display: 'flex',
@@ -1695,6 +2009,25 @@ export default function App() {
               <Bell size={18} />
               {pulseAlerts.some(a => !a.read) && <span className="pulse-indicator"></span>}
             </div>
+
+            {/* 2. settings gear icon */}
+            {activeKompa && (
+              <button 
+                onClick={() => setShowSettingsModal(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#475569',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '6px',
+                  borderRadius: '50%',
+                  cursor: 'pointer'
+                }}
+              >
+                <Settings size={18} />
+              </button>
+            )}
 
             {/* Logout button */}
             <button 
@@ -1740,75 +2073,108 @@ export default function App() {
           </div>
         )}
 
-        {/* Settings / Invite panel for active Kompa */}
-        {activeKompa && (
+        {/* Settings Modal (Contains Invite codes and actions) */}
+        {showSettingsModal && activeKompa && (
           <div style={{
-            background: 'rgba(255, 255, 255, 0.4)',
-            padding: '6px 16px',
-            borderBottom: '1px solid rgba(0,0,0,0.03)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            fontSize: '0.75rem',
-            color: '#64748b'
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+            display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999
           }}>
-            <span>Invite Code: <strong style={{ color: '#b45309' }}>{activeKompa.inviteCode}</strong></span>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <span 
-                style={{ cursor: 'pointer', color: '#2563eb', fontWeight: 700 }}
-                onClick={() => {
-                  navigator.clipboard.writeText(activeKompa.inviteCode);
-                  alert('Invite Code copied to clipboard!');
-                }}
-              >
-                Copy
-              </span>
-              <span 
-                style={{ cursor: 'pointer', color: 'var(--accent-rose)', fontWeight: 700 }}
-                onClick={handleDeleteLeaveKompa}
-              >
-                {activeKompa.ownerId === currentUserProfile.id ? 'Delete' : 'Leave'}
-              </span>
-              <span 
-                style={{ cursor: 'pointer', color: '#1e3a8a', fontWeight: 700 }}
-                onClick={() => {
-                  const name = prompt('Enter a new custom name for this Kompa:');
-                  if (name && name.trim()) {
-                    safeDbWrite(() => supabase.from('kompas').update({ name }).eq('id', activeKompa.id));
-                    setActiveKompa({ ...activeKompa, name });
-                    fetchUserKompas(currentUserProfile.id);
-                  }
-                }}
-              >
-                Rename
-              </span>
-              <span 
-                style={{ cursor: 'pointer', color: '#1e3a8a', fontWeight: 700 }}
-                onClick={() => {
-                  if (joinedKompas.length >= 3) {
-                    alert('Create limit reached (max 3).');
-                  } else {
-                    const name = prompt('Enter name for the new Kompa:');
-                    if (name && name.trim()) {
-                      setKompaNameInput(name);
-                      handleCreateKompa();
-                    }
-                  }
-                }}
-              >
-                + New
-              </span>
-              <span 
-                style={{ cursor: 'pointer', color: '#1e3a8a', fontWeight: 700 }}
-                onClick={() => {
-                  const code = prompt('Enter 6-digit code to join another Kompa:');
-                  if (code && code.trim()) {
-                    setKompaCodeInput(code);
-                    handleJoinKompa();
-                  }
-                }}
-              >
-                + Join
-              </span>
+            <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', alignItems: 'center' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Kompa Settings</h3>
+                <X size={18} className="cursor-pointer" onClick={() => setShowSettingsModal(false)} />
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700 }}>Active Kompa</label>
+                  <div style={{ fontSize: '1rem', fontWeight: 800, marginTop: '2px', color: '#0f172a' }}>{activeKompa.name}</div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700 }}>Invite Code</label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#b45309', background: 'rgba(180,83,9,0.06)', padding: '6px 12px', borderRadius: '8px', border: '1px dashed rgba(180,83,9,0.2)' }}>
+                      {activeKompa.inviteCode}
+                    </div>
+                    <button 
+                      className="btn-secondary" 
+                      style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+                      onClick={() => {
+                        navigator.clipboard.writeText(activeKompa.inviteCode);
+                        alert('Invite Code copied to clipboard!');
+                      }}
+                    >
+                      Copy Code
+                    </button>
+                  </div>
+                </div>
+
+                <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.05)' }} />
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <button 
+                    className="btn-secondary" 
+                    style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    onClick={() => {
+                      const name = prompt('Enter a new custom name for this Kompa:');
+                      if (name && name.trim()) {
+                        safeDbWrite(() => supabase.from('kompas').update({ name }).eq('id', activeKompa.id));
+                        setActiveKompa({ ...activeKompa, name });
+                        fetchUserKompas(currentUserProfile.id);
+                        setShowSettingsModal(false);
+                      }
+                    }}
+                  >
+                    <span>Rename Kompa</span>
+                    <ChevronRight size={14} />
+                  </button>
+
+                  <button 
+                    className="btn-secondary" 
+                    style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    onClick={() => {
+                      if (joinedKompas.length >= 3) {
+                        alert('Create limit reached (max 3).');
+                      } else {
+                        const name = prompt('Enter name for the new Kompa:');
+                        if (name && name.trim()) {
+                          setKompaNameInput(name);
+                          handleCreateKompa();
+                        }
+                      }
+                    }}
+                  >
+                    <span>+ Create New Kompa</span>
+                    <ChevronRight size={14} />
+                  </button>
+
+                  <button 
+                    className="btn-secondary" 
+                    style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    onClick={() => {
+                      const code = prompt('Enter 6-digit code to join another Kompa:');
+                      if (code && code.trim()) {
+                        setKompaCodeInput(code);
+                        handleJoinKompa();
+                      }
+                    }}
+                  >
+                    <span>+ Join Another Kompa</span>
+                    <ChevronRight size={14} />
+                  </button>
+
+                  <button 
+                    className="btn-secondary" 
+                    style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--accent-rose)' }}
+                    onClick={handleDeleteLeaveKompa}
+                  >
+                    <span>{activeKompa.ownerId === currentUserProfile.id ? 'Permanently Delete Kompa' : 'Leave Kompa'}</span>
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -2133,48 +2499,134 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 2: SHELF (MINIMALIST CATALOG) */}
+          {/* TAB 2: SHELF & WISHLIST SHOWCASE */}
           {activeTab === 'shelf' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Shelf</h2>
-                  <p style={{ fontSize: '0.78rem', color: '#64748b' }}>Shared household inventory tracker</p>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Shelf & Catalog</h2>
+                  
+                  {/* Sub-tab selection */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                    <button 
+                      className={`persona-btn ${shelfSubTab === 'catalog' ? 'active' : ''}`}
+                      onClick={() => setShelfSubTab('catalog')}
+                      style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                    >
+                      Stock Inventory
+                    </button>
+                    <button 
+                      className={`persona-btn ${shelfSubTab === 'inventory' ? 'active' : ''}`}
+                      onClick={() => setShelfSubTab('inventory')}
+                      style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                    >
+                      Wishlist & Assets
+                    </button>
+                  </div>
                 </div>
-                <button className="btn-primary" style={{ padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
-                  onClick={() => setShowAddShelfModal(true)}>
-                  <Plus size={14} />
-                  Add Stock
-                </button>
+
+                {shelfSubTab === 'catalog' ? (
+                  <button className="btn-primary" style={{ padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                    onClick={() => setShowAddShelfModal(true)}>
+                    <Plus size={14} />
+                    Add Stock
+                  </button>
+                ) : (
+                  <button className="btn-primary" style={{ padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                    onClick={() => setShowAddInventoryModal(true)}>
+                    <Plus size={14} />
+                    Add Asset
+                  </button>
+                )}
               </div>
 
-              {/* Minimalist Grid of items */}
-              <div className="shelf-board">
-                {shelfItems.map(item => (
-                  <div 
-                    key={item.id} 
-                    className={`shelf-item-card ${item.status === 'stocked' ? 'stocked' : ''}`}
-                    onClick={() => setShowShelfDetailsModal(item)}
-                    style={{
-                      borderLeft: `3px solid ${item.priority === 'high' ? 'var(--accent-rose)' : item.priority === 'medium' ? 'var(--accent-amber)' : 'var(--accent-blue)'}`
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                      <span className="shelf-item-name">{item.name}</span>
-                    </div>
+              {/* Sub tab 1: Standard stock Inventory */}
+              {shelfSubTab === 'catalog' && (
+                <div className="shelf-board">
+                  {shelfItems.map(item => (
+                    <div 
+                      key={item.id} 
+                      className={`shelf-item-card ${item.status === 'stocked' ? 'stocked' : ''}`}
+                      onClick={() => setShowShelfDetailsModal(item)}
+                      style={{
+                        borderLeft: `3px solid ${item.priority === 'high' ? 'var(--accent-rose)' : item.priority === 'medium' ? 'var(--accent-amber)' : 'var(--accent-blue)'}`
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                        <span className="shelf-item-name">{item.name}</span>
+                      </div>
 
-                    <div style={{ marginTop: '8px' }}>
-                      <span className={`shelf-status-pill ${item.status}`}>
-                        {item.status === 'stocked' ? 'Stocked' : item.status === 'low' ? 'Low Stock' : 'Out of stock'}
-                      </span>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', color: '#94a3b8', marginTop: '6px', fontWeight: 500 }}>
-                        <span>by {kompaMembers.find(h => h.id === item.addedById)?.name}</span>
-                        <span>{item.timestamp}</span>
+                      <div style={{ marginTop: '8px' }}>
+                        <span className={`shelf-status-pill ${item.status}`}>
+                          {item.status === 'stocked' ? 'Stocked' : item.status === 'low' ? 'Low Stock' : 'Out of stock'}
+                        </span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', color: '#94a3b8', marginTop: '6px', fontWeight: 500 }}>
+                          <span>by {kompaMembers.find(h => h.id === item.addedById)?.name}</span>
+                          <span>{item.timestamp}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Sub tab 2: Wishlist inventory asset showcase */}
+              {shelfSubTab === 'inventory' && (
+                <div>
+                  {inventoryItems.length === 0 ? (
+                    <div className="glass-card" style={{ padding: '30px 16px', textAlign: 'center' }}>
+                      <ImageIcon size={30} style={{ color: 'var(--accent-purple)', margin: '0 auto 10px' }} />
+                      <h4 style={{ fontWeight: 800 }}>No Wishlist Assets</h4>
+                      <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '4px' }}>
+                        Add appliances, household items, or wishlist entries you want to share with roommates.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {inventoryItems.map(item => (
+                        <div key={item.id} className="glass-card" style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '12px', margin: 0 }}>
+                          {renderWishlistClipart(item.imageUrl || '')}
+                          
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1e293b' }}>{item.name}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px', display: 'flex', gap: '8px' }}>
+                              <span>Price: ${item.price?.toFixed(2)}</span>
+                              <span>•</span>
+                              <span>Added by: {item.addedBy}</span>
+                            </div>
+                          </div>
+
+                          {item.itemUrl && (
+                            <a 
+                              href={item.itemUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              style={{ padding: '8px', borderRadius: '50%', background: 'rgba(0,0,0,0.03)', color: '#2563eb', display: 'flex' }}
+                            >
+                              <ExternalLink size={14} />
+                            </a>
+                          )}
+                          
+                          <button 
+                            onClick={async () => {
+                              const confirmDel = window.confirm('Remove this asset from wishlist?');
+                              if (confirmDel) {
+                                setInventoryItems(prev => prev.filter(i => i.id !== item.id));
+                                if (dbSynced) {
+                                  await supabase.from('inventory_items').delete().eq('id', item.id);
+                                }
+                              }
+                            }}
+                            style={{ background: 'none', border: 'none', padding: '8px', color: 'var(--accent-rose)', cursor: 'pointer' }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Add item to Shelf Modal */}
               {showAddShelfModal && (
@@ -2204,6 +2656,49 @@ export default function App() {
                       <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                         <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setShowAddShelfModal(false)}>Cancel</button>
                         <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleAddShelfItem}>Add Item</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Add Wishlist Asset Modal */}
+              {showAddInventoryModal && (
+                <div style={{
+                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+                }}>
+                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Add Wishlist Asset</h3>
+                      <X size={18} className="cursor-pointer" onClick={() => setShowAddInventoryModal(false)} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Asset Name</label>
+                        <input type="text" placeholder="e.g. Dyson Vacuum V15, Coffee Pot" value={newInvName} onChange={e => setNewInvName(e.target.value)} style={{ marginTop: '4px' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Estimated Price ($)</label>
+                        <input type="number" placeholder="e.g. 299.99" value={newInvPrice} onChange={e => setNewInvPrice(e.target.value)} style={{ marginTop: '4px' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Item Link URL</label>
+                        <input type="text" placeholder="e.g. https://amazon.com/..." value={newInvUrl} onChange={e => setNewInvUrl(e.target.value)} style={{ marginTop: '4px' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Realistic Clipart Clazz</label>
+                        <select value={newInvCategory} onChange={e => setNewInvCategory(e.target.value as any)} style={{ marginTop: '4px' }}>
+                          <option value="coffee">Coffee Maker (Nespresso style)</option>
+                          <option value="vacuum">Vacuum (Dyson style)</option>
+                          <option value="toaster">Toaster (Smeg style)</option>
+                          <option value="speaker">Smart Speaker (Sonos style)</option>
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                        <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setShowAddInventoryModal(false)}>Cancel</button>
+                        <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleAddInventory}>Add Wishlist</button>
                       </div>
                     </div>
                   </div>
@@ -2282,7 +2777,7 @@ export default function App() {
               </div>
 
               {!activeRun ? (
-                <div className="glass-card" style={{ padding: '30px 16px', textAlign: 'center' }}>
+                <div className="glass-card" style={{ padding: '24px 16px', textAlign: 'center' }}>
                   <div style={{
                     width: '54px', height: '54px', borderRadius: '50%',
                     background: 'rgba(37, 99, 235, 0.08)', display: 'flex',
@@ -2298,22 +2793,45 @@ export default function App() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <button className="btn-primary" onClick={() => handleStartRun('Costco')}>Start Costco Run</button>
                     <button className="btn-secondary" onClick={() => handleStartRun('Walmart')}>Start Walmart Run</button>
+                    
+                    {/* Custom Run Entry field */}
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
+                      <input 
+                        type="text" 
+                        placeholder="Enter custom store (e.g. Target, Trader Joe's)..." 
+                        value={customStoreInput} 
+                        onChange={e => setCustomStoreInput(e.target.value)} 
+                        style={{ padding: '9px', fontSize: '0.85rem' }}
+                      />
+                      <button 
+                        className="btn-primary" 
+                        style={{ padding: '9px 12px', fontSize: '0.78rem', flexShrink: 0 }}
+                        onClick={() => {
+                          if (customStoreInput.trim()) {
+                            handleStartRun(customStoreInput.trim());
+                            setCustomStoreInput('');
+                          }
+                        }}
+                      >
+                        + Custom
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (
                 <div>
-                  <div className="glass-card" style={{ borderLeft: '4px solid var(--accent-blue)', padding: '14px', marginBottom: '12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--accent-blue)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          LIVE COLLABORATION ACTIVE
-                        </div>
-                        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '2px', color: '#0f172a' }}>
-                          {kompaMembers.find(h => h.id === activeRun.shopperId)?.name}'s {activeRun.store} Run
-                        </h3>
+                  <div className="glass-card" style={{ borderLeft: '4px solid var(--accent-blue)', padding: '14px', marginBottom: '12px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    {renderRetailerLogo(activeRun.store)}
+                    
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--accent-blue)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        LIVE COLLABORATION ACTIVE
                       </div>
-                      <span className="run-dot"></span>
+                      <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '2px', color: '#0f172a' }}>
+                        {kompaMembers.find(h => h.id === activeRun.shopperId)?.name}'s {activeRun.store} Run
+                      </h3>
                     </div>
+                    <span className="run-dot"></span>
                   </div>
 
                   {/* Requests list */}
@@ -2568,7 +3086,6 @@ export default function App() {
                             <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>Analyze printed receipts</p>
                             <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', marginBottom: '12px' }}>Upload a file or choose dummy presets</p>
                             
-                            {/* File Upload Selector */}
                             <label className="btn-secondary" style={{
                               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                               padding: '10px', cursor: 'pointer', marginBottom: '12px', fontSize: '0.8rem'
@@ -2698,12 +3215,23 @@ export default function App() {
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '620px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '8px', marginBottom: '12px' }}>
                 <Users size={16} style={{ color: 'var(--accent-purple)' }} />
-                <div>
-                  <h2 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>Kompa Chatroom</h2>
+                
+                {/* 4. Active Kompa Specific Chatroom Name */}
+                <div style={{ flex: 1 }}>
+                  <h2 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>{activeKompa?.name} Chatroom</h2>
                   <span style={{ fontSize: '0.68rem', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
                     <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-emerald)' }}></span>
                     Double Ratchet Encryption Active
                   </span>
+                </div>
+
+                {/* 5. Online members initials row */}
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  {kompaMembers.map(m => (
+                    <div key={m.id} title={m.name}>
+                      {renderInitialsAvatar(m, 26)}
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -2757,13 +3285,23 @@ export default function App() {
                 <div ref={chatEndRef} />
               </div>
 
+              {/* Typing Indicator */}
+              {typingUser && (
+                <div className="typing-indicator">
+                  <div className="typing-dot"></div>
+                  <div className="typing-dot"></div>
+                  <div className="typing-dot"></div>
+                  <span style={{ marginLeft: '4px' }}>{typingUser} is typing...</span>
+                </div>
+              )}
+
               {/* Chat controls */}
-              <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', borderTop: '1px solid rgba(0,0,0,0.04)', paddingTop: '10px' }}>
+              <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', borderTop: '1px solid rgba(0,0,0,0.04)', paddingTop: '10px', paddingBottom: '20px' }}>
                 <input 
                   type="text" 
                   placeholder="Message homemates..." 
                   value={chatInput} 
-                  onChange={e => setChatInput(e.target.value)} 
+                  onChange={e => handleChatInputChange(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
                   style={{ padding: '10px 12px' }}
                 />
