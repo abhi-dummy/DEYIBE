@@ -106,6 +106,16 @@ export default function App() {
 
   // 1. Check Supabase connection and load tables on mount
   useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      console.log('Global Click Captured on Target:', e.target);
+    };
+    window.addEventListener('click', handleGlobalClick);
+
+    const handleGlobalError = (e: ErrorEvent) => {
+      console.error('Captured Runtime Error in App:', e.error);
+    };
+    window.addEventListener('error', handleGlobalError);
+
     const initDatabase = async () => {
       try {
         setDbLoading(true);
@@ -129,6 +139,11 @@ export default function App() {
     };
 
     initDatabase();
+
+    return () => {
+      window.removeEventListener('click', handleGlobalClick);
+      window.removeEventListener('error', handleGlobalError);
+    };
   }, []);
 
   // Realtime Subscriptions
