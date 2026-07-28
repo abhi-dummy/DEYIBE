@@ -22,14 +22,14 @@ import {
   Zap,
   Info,
   AlertCircle,
-  Database,
-  Upload
+  Upload,
+  LogOut,
+  Layers
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { createWorker } from 'tesseract.js';
 import { supabase } from './utils/supabaseClient';
-import type { Homemate, Expense, ShelfItem, ChatMessage, Task, PulseAlert, RunSession, RunRequest } from './types';
-import { initialHomemates, initialShelfItems, initialExpenses, initialChatMessages, initialTasks, initialPulseAlerts } from './data/mockData';
+import type { Homemate, Expense, ShelfItem, ChatMessage, Task, PulseAlert, RunSession, RunRequest, Kompa } from './types';
 import { getOptimizedDebts, calculateBalances } from './utils/settleEngine';
 
 interface FlowLog {
@@ -40,11 +40,86 @@ interface FlowLog {
 }
 
 export default function App() {
-  // App States
+  // Authentication & Session States
+  const [session, setSession] = useState<any | null>(null);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [currentUserProfile, setCurrentUserProfile] = useState<Homemate | null>(null);
+
+  // Kompa (Group) Management States
+  const [joinedKompas, setJoinedKompas] = useState<Kompa[]>([]);
+  const [activeKompa, setActiveKompa] = useState<Kompa | null>(null);
+  const [kompaNameInput, setKompaNameInput] = useState('');
+  const [kompaCodeInput, setKompaCodeInput] = useState('');
+
+  
+  // App Core States
   const [activeTab, setActiveTab] = useState<'home' | 'shelf' | 'run' | 'split' | 'chat'>('home');
+  const [kompaMembers, setKompaMembers] = useState<Homemate[]>([]);
   const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
   const activeTabRef = useRef(activeTab);
 
+  // Synced States
+  const [shelfItems, setShelfItems] = useState<ShelfItem[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [pulseAlerts, setPulseAlerts] = useState<PulseAlert[]>([]);
+  const [activeRun, setActiveRun] = useState<RunSession | null>(null);
+
+  // DB Sync indicator status
+  const [dbSynced, setDbSynced] = useState<boolean>(false);
+  const [dbLoading, setDbLoading] = useState<boolean>(false);
+  const [showDbAlert, setShowDbAlert] = useState<boolean>(false);
+
+  // UI Flow Logs (Timeline)
+  const [flowLogs, setFlowLogs] = useState<FlowLog[]>([]);
+
+  // Chore Animation Overlays
+  const [choreAnimationType, setChoreAnimationType] = useState<'trash' | 'kitchen' | 'general' | null>(null);
+
+  // Modal Dialogs States
+  const [showPulse, setShowPulse] = useState(false);
+  const [showAddShelfModal, setShowAddShelfModal] = useState(false);
+  const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [showSettleModal, setShowSettleModal] = useState(false);
+  const [showOCRModal, setShowOCRModal] = useState(false);
+  const [showShelfDetailsModal, setShowShelfDetailsModal] = useState<ShelfItem | null>(null);
+  const [showAddChoreModal, setShowAddChoreModal] = useState(false);
+
+  // Form Inputs
+  const [newShelfName, setNewShelfName] = useState('');
+  const [newShelfPriority, setNewShelfPriority] = useState<'high' | 'medium' | 'low'>('medium');
+  const [newShelfVisibility] = useState<string[]>([]);
+
+
+  const [newExpTitle, setNewExpTitle] = useState('');
+  const [newExpAmount, setNewExpAmount] = useState('');
+  const [newExpPayer, setNewExpPayer] = useState('');
+  const [newExpSplit, setNewExpSplit] = useState<'equal' | 'percentage' | 'custom'>('equal');
+  const [newExpVisibility, setNewExpVisibility] = useState<string[]>([]);
+
+  const [chatInput, setChatInput] = useState('');
+  const [newRequestName, setNewRequestName] = useState('');
+
+  // Chore Creation Form
+  const [newChoreTitle, setNewChoreTitle] = useState('');
+  const [newChoreDueDate, setNewChoreDueDate] = useState('');
+  const [newChoreFrequency, setNewChoreFrequency] = useState<'once' | 'daily' | 'weekly' | 'monthly'>('weekly');
+  const [newChoreType, setNewChoreType] = useState<'general' | 'trash' | 'kitchen'>('general');
+  const [newChoreAssignedTo, setNewChoreAssignedTo] = useState<string[]>([]);
+  
+  // OCR Scan states
+  const [ocrScanning, setOcrScanning] = useState(false);
+  const [ocrResult, setOcrResult] = useState<any | null>(null);
+  const [ocrProgress, setOcrProgress] = useState<string>('');
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Sync activeTab to ref
   useEffect(() => {
     activeTabRef.current = activeTab;
     if (activeTab === 'chat') {
@@ -52,145 +127,254 @@ export default function App() {
     }
   }, [activeTab]);
 
-  const [homemates] = useState<Homemate[]>(initialHomemates);
-  const [currentUser] = useState<Homemate>(initialHomemates[0]); // Abhi (You)
-  
-  // Local/Synced Database States
-  const [shelfItems, setShelfItems] = useState<ShelfItem[]>(initialShelfItems);
-  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initialChatMessages);
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
-  const [pulseAlerts, setPulseAlerts] = useState<PulseAlert[]>(initialPulseAlerts);
-  const [activeRun, setActiveRun] = useState<RunSession | null>({
-    id: 'run1',
-    shopperId: '2', // Sandeep
-    store: 'Costco',
-    status: 'active',
-    requests: [
-      { id: 'req1', itemName: 'Organic Chicken Breast', requesterId: '4', status: 'searching' },
-      { id: 'req2', itemName: 'Toilet Paper rolls', requesterId: '1', status: 'pending' }
-    ]
-  });
-
-  // DB Connection & Warning banners
-  const [dbSynced, setDbSynced] = useState<boolean>(false);
-  const [dbLoading, setDbLoading] = useState<boolean>(true);
-  const [showDbAlert, setShowDbAlert] = useState<boolean>(false);
-
-  // UI Flow Logs (Timeline)
-  const [flowLogs, setFlowLogs] = useState<FlowLog[]>([
-    { id: 'f1', text: 'Divya reported Toilet Paper as OUT OF STOCK on Shelf requirements', time: '3h ago', type: 'alert' },
-    { id: 'f2', text: 'Sandeep initiated a Costco Run session', time: '1h ago', type: 'run' },
-    { id: 'f3', text: 'Abhi completed the "Dispose of kitchen waste" chore', time: '2h ago', type: 'chore' },
-    { id: 'f4', text: 'Sandeep logged High-speed Wi-Fi subscription cost ($60.00) in Split', time: 'Yesterday', type: 'split' }
-  ]);
-
-  // Modal / Window States
-  const [showPulse, setShowPulse] = useState(false);
-  const [showAddShelfModal, setShowAddShelfModal] = useState(false);
-  const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
-  const [showSettleModal, setShowSettleModal] = useState(false);
-  const [showOCRModal, setShowOCRModal] = useState(false);
-  const [showShelfDetailsModal, setShowShelfDetailsModal] = useState<ShelfItem | null>(null);
-
-  // Form Inputs
-  const [newShelfName, setNewShelfName] = useState('');
-  const [newShelfPriority, setNewShelfPriority] = useState<'high' | 'medium' | 'low'>('medium');
-  const [newShelfVisibility, setNewShelfVisibility] = useState<string[]>(['1', '2', '3', '4']);
-
-  const [newExpTitle, setNewExpTitle] = useState('');
-  const [newExpAmount, setNewExpAmount] = useState('');
-  const [newExpPayer, setNewExpPayer] = useState('1');
-  const [newExpSplit, setNewExpSplit] = useState<'equal' | 'percentage' | 'custom'>('equal');
-  const [newExpVisibility, setNewExpVisibility] = useState<string[]>(['1', '2', '3', '4']);
-
-  const [chatInput, setChatInput] = useState('');
-  const [newRequestName, setNewRequestName] = useState('');
-  
-  // OCR processing states
-  const [ocrScanning, setOcrScanning] = useState(false);
-  const [ocrResult, setOcrResult] = useState<any | null>(null);
-  const [ocrProgress, setOcrProgress] = useState<string>('');
-
-  const chatEndRef = useRef<HTMLDivElement>(null);
-
-  // Helper for safe optimistic writes to Supabase
+  // Helper for background safe database operations
   const safeDbWrite = async (operation: () => any) => {
     try {
       const result = await operation();
       if (result && result.error) {
-        console.warn('Supabase write completed with constraint warnings:', result.error.message);
+        console.warn('Supabase DB transaction warning:', result.error.message);
       }
       return result;
     } catch (err) {
-      console.warn('Supabase request failed in background (continuing offline local-first state):', err);
+      console.warn('Supabase DB background write failed (continuing offline local-first state):', err);
       return null;
     }
   };
 
-  // 1. Check Supabase connection and load tables on mount
+  // 1. Supabase Auth Session listener
   useEffect(() => {
-    const handleGlobalClick = (e: MouseEvent) => {
-      console.log('Global Click Captured on Target:', e.target);
-    };
-    window.addEventListener('click', handleGlobalClick);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) {
+        fetchUserProfile(session.user.id);
+      }
+    });
 
-    const handleGlobalError = (e: ErrorEvent) => {
-      console.error('Captured Runtime Error in App:', e.error);
-    };
-    window.addEventListener('error', handleGlobalError);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session?.user) {
+        fetchUserProfile(session.user.id);
+      } else {
+        setCurrentUserProfile(null);
+        setJoinedKompas([]);
+        setActiveKompa(null);
+      }
+    });
 
-    const initDatabase = async () => {
-      try {
-        setDbLoading(true);
-        // Test query on profiles
-        const { error } = await supabase.from('profiles').select('id').limit(1);
-        
-        if (error) {
-          throw new Error('Supabase tables not configured yet.');
-        }
+    return () => subscription.unsubscribe();
+  }, []);
 
+  // Fetch current user's profile information
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      let { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (error && error.code === 'PGRST116') {
+        // Profile doesn't exist yet, auto-create it
+        const fallbackName = session?.user?.email?.split('@')[0] || 'User';
+        const newProfile = {
+          id: userId,
+          name: fallbackName,
+          avatar: fallbackName.slice(0, 2).toUpperCase(),
+          color: getRandomColor()
+        };
+        await supabase.from('profiles').insert(newProfile);
+        profile = newProfile;
+      }
+
+      if (profile) {
+        setCurrentUserProfile({
+          id: profile.id,
+          name: profile.name,
+          avatar: profile.avatar,
+          color: profile.color
+        });
+        fetchUserKompas(profile.id);
+      }
+    } catch (err) {
+      console.error('Failed to resolve profile', err);
+    }
+  };
+
+  // Fetch user's joined/owned Kompas
+  const fetchUserKompas = async (profileId: string) => {
+    try {
+      setDbLoading(true);
+      const { data: memberships, error } = await supabase
+        .from('kompa_members')
+        .select('kompa_id, kompas(*)')
+        .eq('profile_id', profileId);
+
+      if (error) throw error;
+
+      if (memberships && memberships.length > 0) {
+        const kompaList: Kompa[] = memberships.map((m: any) => ({
+          id: m.kompas.id,
+          name: m.kompas.name,
+          inviteCode: m.kompas.invite_code,
+          ownerId: m.kompas.owner_id
+        }));
+        setJoinedKompas(kompaList);
+        // Set first Kompa active by default
+        setActiveKompa(kompaList[0]);
         setDbSynced(true);
-        // Load initial data from Supabase
-        await loadFromSupabase();
-      } catch (err) {
-        console.warn('Supabase not connected or tables missing. Falling back to local offline mode.', err);
+      } else {
+        setJoinedKompas([]);
+        setActiveKompa(null);
         setDbSynced(false);
-        setShowDbAlert(true);
-      } finally {
-        setDbLoading(false);
+      }
+    } catch (err) {
+      console.warn('Error retrieving user Kompa list:', err);
+      setDbSynced(false);
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  // Fetch active Kompa members
+  useEffect(() => {
+    if (!activeKompa) {
+      setKompaMembers([]);
+      return;
+    }
+
+    const loadKompaMembers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('kompa_members')
+          .select('profile_id, profiles(*)')
+          .eq('kompa_id', activeKompa.id);
+
+        if (error) throw error;
+
+        if (data) {
+          const members: Homemate[] = data.map((d: any) => ({
+            id: d.profiles.id,
+            name: d.profiles.name,
+            avatar: d.profiles.avatar,
+            color: d.profiles.color
+          }));
+          setKompaMembers(members);
+          if (members.length > 0 && !newExpPayer) {
+            setNewExpPayer(members[0].id);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load Kompa members:', err);
       }
     };
 
-    initDatabase();
+    loadKompaMembers();
+    loadKompaData();
+  }, [activeKompa]);
 
-    return () => {
-      window.removeEventListener('click', handleGlobalClick);
-      window.removeEventListener('error', handleGlobalError);
-    };
-  }, []);
+  // Load specific data for active Kompa
+  const loadKompaData = async () => {
+    if (!activeKompa) return;
+    try {
+      setDbLoading(true);
+      
+      // Load shelf items
+      const { data: shelf } = await supabase.from('shelf_items').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
+      if (shelf) {
+        setShelfItems(shelf.map(s => ({
+          id: s.id,
+          name: s.name,
+          status: s.status,
+          priority: s.priority,
+          addedById: s.added_by || '1',
+          visibility: s.visibility || [],
+          timestamp: 'Synced'
+        })));
+      }
 
-  // Realtime Subscriptions
+      // Load chat messages
+      const { data: chat } = await supabase.from('chat_messages').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: true });
+      if (chat) {
+        setChatMessages(chat.map(c => ({
+          id: c.id,
+          senderId: c.sender_id || 'system',
+          text: c.text,
+          timestamp: new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        })));
+      }
+
+      // Load tasks/chores
+      const { data: chores } = await supabase.from('tasks').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
+      if (chores) {
+        setTasks(chores.map(t => ({
+          id: t.id,
+          title: t.title,
+          assignedTo: t.assigned_to || [],
+          dueDate: t.due_date,
+          completed: t.completed,
+          frequency: t.frequency,
+          choreType: t.chore_type
+        })));
+      }
+
+      // Load expenses
+      const { data: exp } = await supabase.from('expenses').select('*').eq('kompa_id', activeKompa.id).order('date', { ascending: false });
+      if (exp) {
+        setExpenses(exp.map(e => ({
+          id: e.id,
+          title: e.title,
+          amount: Number(e.amount),
+          payerId: e.payer_id,
+          splitMethod: e.split_method,
+          shares: e.shares,
+          date: new Date(e.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+          visibility: []
+        })));
+      }
+
+      // Load pulse alerts
+      const { data: pulses } = await supabase.from('pulse_alerts').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
+      if (pulses) {
+        setPulseAlerts(pulses.map(p => ({
+          id: p.id,
+          title: p.title,
+          message: p.message,
+          type: p.type,
+          timestamp: 'Synced',
+          read: p.read
+        })));
+      }
+
+      setDbSynced(true);
+    } catch (err) {
+      console.warn('Failed loading Kompa data', err);
+      setDbSynced(false);
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  // Realtime Subscriptions for Active Kompa
   useEffect(() => {
-    if (!dbSynced) return;
+    if (!dbSynced || !activeKompa) return;
 
-    // Subscribe to chat
+    // Subscribe to chat messages
     const chatChannel = supabase
-      .channel('chat_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, async (payload) => {
-        const { data } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true });
+      .channel('kompa_chat_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages', filter: `kompa_id=eq.${activeKompa.id}` }, async (payload) => {
+        const { data } = await supabase.from('chat_messages').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: true });
         if (data) {
-          setChatMessages(data.map(m => ({
-            id: m.id,
-            senderId: m.sender_id,
-            text: m.text,
-            timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          setChatMessages(data.map(c => ({
+            id: c.id,
+            senderId: c.sender_id || 'system',
+            text: c.text,
+            timestamp: new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           })));
 
-          // Check if payload is an insert from someone else while we're not on the chat tab
+          // Increment unread count if we are not on chat tab
           if (payload && payload.eventType === 'INSERT') {
             const newMsg = payload.new;
-            if (newMsg && newMsg.sender_id !== currentUser.id && activeTabRef.current !== 'chat') {
+            if (newMsg && newMsg.sender_id !== currentUserProfile?.id && activeTabRef.current !== 'chat') {
               setUnreadChatCount(prev => prev + 1);
             }
           }
@@ -198,11 +382,30 @@ export default function App() {
       })
       .subscribe();
 
+    // Subscribe to tasks/chores
+    const taskChannel = supabase
+      .channel('kompa_task_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
+        const { data } = await supabase.from('tasks').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
+        if (data) {
+          setTasks(data.map(t => ({
+            id: t.id,
+            title: t.title,
+            assignedTo: t.assigned_to || [],
+            dueDate: t.due_date,
+            completed: t.completed,
+            frequency: t.frequency,
+            choreType: t.chore_type
+          })));
+        }
+      })
+      .subscribe();
+
     // Subscribe to shelf items
     const shelfChannel = supabase
-      .channel('shelf_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'shelf_items' }, async () => {
-        const { data } = await supabase.from('shelf_items').select('*').order('created_at', { ascending: false });
+      .channel('kompa_shelf_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shelf_items', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
+        const { data } = await supabase.from('shelf_items').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
         if (data) {
           setShelfItems(data.map(s => ({
             id: s.id,
@@ -210,26 +413,8 @@ export default function App() {
             status: s.status,
             priority: s.priority,
             addedById: s.added_by || '1',
-            visibility: s.visibility || ['1', '2', '3', '4'],
-            timestamp: 'Just now'
-          })));
-        }
-      })
-      .subscribe();
-
-    // Subscribe to tasks/chores
-    const tasksChannel = supabase
-      .channel('tasks_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, async () => {
-        const { data } = await supabase.from('tasks').select('*');
-        if (data) {
-          setTasks(data.map(t => ({
-            id: t.id,
-            title: t.title,
-            assignedTo: t.assigned_to || ['1'],
-            dueDate: t.due_date,
-            completed: t.completed,
-            frequency: t.frequency
+            visibility: s.visibility || [],
+            timestamp: 'Synced'
           })));
         }
       })
@@ -237,176 +422,195 @@ export default function App() {
 
     return () => {
       supabase.removeChannel(chatChannel);
+      supabase.removeChannel(taskChannel);
       supabase.removeChannel(shelfChannel);
-      supabase.removeChannel(tasksChannel);
     };
-  }, [dbSynced]);
+  }, [dbSynced, activeKompa, currentUserProfile]);
 
-  // Helper to seed initial mock values to new Supabase tables
-  const seedSupabaseDatabase = async () => {
-    console.log('Seeding initial mockup tables...');
+  // Auth Operations
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail || !authPassword) return;
     
-    // Seed shelf items
-    for (const item of initialShelfItems) {
-      await safeDbWrite(() => supabase.from('shelf_items').insert({
-        id: item.id,
-        name: item.name,
-        status: item.status,
-        priority: item.priority,
-        added_by: item.addedById,
-        visibility: item.visibility
-      }));
-    }
-
-    // Seed tasks
-    for (const task of initialTasks) {
-      await safeDbWrite(() => supabase.from('tasks').insert({
-        id: task.id,
-        title: task.title,
-        assigned_to: task.assignedTo,
-        due_date: task.dueDate,
-        completed: task.completed,
-        frequency: task.frequency
-      }));
-    }
-
-    // Seed chat messages
-    for (const msg of initialChatMessages) {
-      await safeDbWrite(() => supabase.from('chat_messages').insert({
-        id: msg.id,
-        sender_id: msg.senderId,
-        text: msg.text
-      }));
-    }
-
-    // Seed expenses
-    for (const exp of initialExpenses) {
-      await safeDbWrite(() => supabase.from('expenses').insert({
-        id: exp.id,
-        title: exp.title,
-        amount: exp.amount,
-        payer_id: exp.payerId,
-        split_method: exp.splitMethod,
-        shares: exp.shares
-      }));
+    setAuthLoading(true);
+    try {
+      if (authMode === 'signup') {
+        const { data, error } = await supabase.auth.signUp({
+          email: authEmail,
+          password: authPassword
+        });
+        if (error) throw error;
+        
+        if (data?.user) {
+          // Register profile
+          const nickname = authName.trim() || authEmail.split('@')[0];
+          const newProfile = {
+            id: data.user.id,
+            name: nickname,
+            avatar: nickname.slice(0, 2).toUpperCase(),
+            color: getRandomColor()
+          };
+          await supabase.from('profiles').insert(newProfile);
+          setCurrentUserProfile(newProfile);
+          setAuthEmail('');
+          setAuthPassword('');
+          setAuthName('');
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword
+        });
+        if (error) throw error;
+        setAuthEmail('');
+        setAuthPassword('');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Authentication error occurred.');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
-  // Load all tables helper
-  const loadFromSupabase = async () => {
-    // Load shelf
-    const { data: shelf } = await supabase.from('shelf_items').select('*').order('created_at', { ascending: false });
-    // Load chat
-    const { data: chat } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true });
-    // Load expenses
-    const { data: exp } = await supabase.from('expenses').select('*').order('date', { ascending: false });
-    // Load tasks
-    const { data: tsk } = await supabase.from('tasks').select('*');
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+    setCurrentUserProfile(null);
+    setJoinedKompas([]);
+    setActiveKompa(null);
+  };
 
-    // If database is completely empty, seed it!
-    const isDbEmpty = (!shelf || shelf.length === 0) && (!chat || chat.length === 0);
-    if (isDbEmpty) {
-      await seedSupabaseDatabase();
-      // Reload after seeding
-      const { data: s } = await supabase.from('shelf_items').select('*').order('created_at', { ascending: false });
-      const { data: c } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true });
-      const { data: e } = await supabase.from('expenses').select('*').order('date', { ascending: false });
-      const { data: t } = await supabase.from('tasks').select('*');
-      
-      if (s) setShelfItems(s.map(item => ({
-        id: item.id,
-        name: item.name,
-        status: item.status,
-        priority: item.priority,
-        addedById: item.added_by || '1',
-        visibility: item.visibility || ['1', '2', '3', '4'],
-        timestamp: 'Synced'
-      })));
+  // Create a new Kompa
+  const handleCreateKompa = async () => {
+    if (!kompaNameInput.trim() || !currentUserProfile) return;
 
-      if (c) setChatMessages(c.map(m => ({
-        id: m.id,
-        senderId: m.sender_id,
-        text: m.text,
-        timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      })));
-
-      if (e) setExpenses(e.map(ex => ({
-        id: ex.id,
-        title: ex.title,
-        amount: Number(ex.amount),
-        payerId: ex.payer_id,
-        splitMethod: ex.split_method,
-        shares: ex.shares,
-        date: new Date(ex.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
-        visibility: ['1', '2', '3', '4']
-      })));
-
-      if (t) setTasks(t.map(tk => ({
-        id: tk.id,
-        title: tk.title,
-        assignedTo: tk.assigned_to || ['1'],
-        dueDate: tk.due_date,
-        completed: tk.completed,
-        frequency: tk.frequency
-      })));
-
+    // Check limit constraint: Max 3 Kompas
+    const userOwnedCount = joinedKompas.filter(k => k.ownerId === currentUserProfile.id).length;
+    if (userOwnedCount >= 3) {
+      alert('You have reached the limit of 3 Kompa creations. Please delete or leave one of your owned Kompas to create a new one.');
       return;
     }
 
-    if (shelf) {
-      setShelfItems(shelf.map(s => ({
-        id: s.id,
-        name: s.name,
-        status: s.status,
-        priority: s.priority,
-        addedById: s.added_by || '1',
-        visibility: s.visibility || ['1', '2', '3', '4'],
-        timestamp: 'Synced'
-      })));
-    }
+    try {
+      setDbLoading(true);
+      // Generate 6-digit random code
+      const uniqueCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    if (chat) {
-      setChatMessages(chat.map(m => ({
-        id: m.id,
-        senderId: m.sender_id,
-        text: m.text,
-        timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      })));
-    }
+      const { data: newKompa, error } = await supabase
+        .from('kompas')
+        .insert({
+          name: kompaNameInput,
+          invite_code: uniqueCode,
+          owner_id: currentUserProfile.id
+        })
+        .select()
+        .single();
 
-    if (exp) {
-      setExpenses(exp.map(e => ({
-        id: e.id,
-        title: e.title,
-        amount: Number(e.amount),
-        payerId: e.payer_id,
-        splitMethod: e.split_method,
-        shares: e.shares,
-        date: new Date(e.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
-        visibility: ['1', '2', '3', '4']
-      })));
-    }
+      if (error) throw error;
 
-    if (tsk) {
-      setTasks(tsk.map(t => ({
-        id: t.id,
-        title: t.title,
-        assignedTo: t.assigned_to || ['1'],
-        dueDate: t.due_date,
-        completed: t.completed,
-        frequency: t.frequency
-      })));
+      if (newKompa) {
+        // Insert into membership mapping
+        await supabase.from('kompa_members').insert({
+          kompa_id: newKompa.id,
+          profile_id: currentUserProfile.id
+        });
+
+        // Refresh list
+        setKompaNameInput('');
+        fetchUserKompas(currentUserProfile.id);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error creating Kompa.');
+    } finally {
+      setDbLoading(false);
     }
   };
 
-  // Auto scroll chat to bottom
-  useEffect(() => {
-    if (activeTab === 'chat') {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [chatMessages, activeTab]);
+  // Join a Kompa
+  const handleJoinKompa = async () => {
+    if (!kompaCodeInput.trim() || !currentUserProfile) return;
 
-  // Log activity into global House Flow
+    try {
+      setDbLoading(true);
+      
+      // Query Kompa
+      const { data: kompa, error } = await supabase
+        .from('kompas')
+        .select('*')
+        .eq('invite_code', kompaCodeInput.trim())
+        .single();
+
+      if (error || !kompa) {
+        alert('Invalid invite code. Please confirm and try again!');
+        return;
+      }
+
+      // Check if already a member
+      const { data: existing } = await supabase
+        .from('kompa_members')
+        .select('*')
+        .eq('kompa_id', kompa.id)
+        .eq('profile_id', currentUserProfile.id)
+        .single();
+
+      if (existing) {
+        alert('You are already a member of this Kompa!');
+        setKompaCodeInput('');
+        return;
+      }
+
+      // Join
+      await supabase.from('kompa_members').insert({
+        kompa_id: kompa.id,
+        profile_id: currentUserProfile.id
+      });
+
+      setKompaCodeInput('');
+      fetchUserKompas(currentUserProfile.id);
+    } catch (err: any) {
+      alert(err.message || 'Error joining Kompa.');
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  // Delete/Leave active Kompa
+  const handleDeleteLeaveKompa = async () => {
+    if (!activeKompa || !currentUserProfile) return;
+
+    try {
+      setDbLoading(true);
+      const isOwner = activeKompa.ownerId === currentUserProfile.id;
+      
+      if (isOwner) {
+        const confirmDelete = window.confirm('Are you sure you want to permanently delete this Kompa? This will clear all shared inventory, logs, chats, and runs for everyone.');
+        if (!confirmDelete) return;
+
+        // Delete kompa
+        await supabase.from('kompas').delete().eq('id', activeKompa.id);
+      } else {
+        const confirmLeave = window.confirm('Are you sure you want to leave this Kompa?');
+        if (!confirmLeave) return;
+
+        // Leave
+        await supabase.from('kompa_members').delete().eq('kompa_id', activeKompa.id).eq('profile_id', currentUserProfile.id);
+      }
+
+      fetchUserKompas(currentUserProfile.id);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  // Helper utility random color
+  const getRandomColor = () => {
+    const colors = ['#1d4ed8', '#1e3b8a', '#b45309', '#047857', '#b91c1c', '#7c3aed', '#db2777'];
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
+
+  // Add activity timeline logs
   const logFlow = (text: string, type: FlowLog['type']) => {
     const newLog: FlowLog = {
       id: `f_${Date.now()}`,
@@ -417,10 +621,13 @@ export default function App() {
     setFlowLogs(prev => [newLog, ...prev]);
   };
 
-  // Add alert to Pulse panel
+  // Add notification pulse alert
   const addPulse = async (title: string, message: string, type: PulseAlert['type']) => {
+    if (!activeKompa) return;
+    
     if (dbSynced) {
       safeDbWrite(() => supabase.from('pulse_alerts').insert({
+        kompa_id: activeKompa.id,
         title,
         message,
         type,
@@ -439,31 +646,35 @@ export default function App() {
     setPulseAlerts(prev => [newAlert, ...prev]);
   };
 
-  // Send message
+  // Send Chat message
   const handleSendMessage = async () => {
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() || !activeKompa || !currentUserProfile) return;
 
     const newMessage: ChatMessage = {
       id: `m_${Date.now()}`,
-      senderId: currentUser.id,
+      senderId: currentUserProfile.id,
       text: chatInput,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setChatMessages(prev => [...prev, newMessage]);
+    const originalText = chatInput;
     setChatInput('');
 
     if (dbSynced) {
       safeDbWrite(() => supabase.from('chat_messages').insert({
-        sender_id: currentUser.id,
-        text: chatInput
+        kompa_id: activeKompa.id,
+        sender_id: currentUserProfile.id,
+        text: originalText
       }));
     }
   };
 
-  // Settle up payment handler
+  // Settle Balances
   const handleSettleUp = async (debtorId: string, creditorId: string, amount: number) => {
-    const debtor = homemates.find(h => h.id === debtorId)?.name || 'Someone';
-    const creditor = homemates.find(h => h.id === creditorId)?.name || 'Someone';
+    if (!activeKompa) return;
+
+    const debtor = kompaMembers.find(h => h.id === debtorId)?.name || 'Someone';
+    const creditor = kompaMembers.find(h => h.id === creditorId)?.name || 'Someone';
 
     const settleExpense: Expense = {
       id: `e_${Date.now()}`,
@@ -473,14 +684,15 @@ export default function App() {
       splitMethod: 'custom',
       shares: { [creditorId]: amount },
       date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
-      visibility: ['1', '2', '3', '4']
+      visibility: []
     };
 
-    setExpenses(prev => [...prev, settleExpense]);
+    setExpenses(prev => [settleExpense, ...prev]);
     setShowSettleModal(false);
 
     if (dbSynced) {
       safeDbWrite(() => supabase.from('expenses').insert({
+        kompa_id: activeKompa.id,
         title: `Settled balance: ${debtor} to ${creditor}`,
         amount: amount,
         payer_id: debtorId,
@@ -489,7 +701,6 @@ export default function App() {
       }));
     }
 
-    // Confetti effect
     confetti({
       particleCount: 150,
       spread: 80,
@@ -500,9 +711,19 @@ export default function App() {
     addPulse('Account Settled', `${debtor} paid ${creditor} $${amount.toFixed(2)}.`, 'success');
   };
 
-  // Buzz Roommate
+  // Buzz Roommate (Notification Ping)
   const handleBuzz = (target: Homemate) => {
-    const text = `System request: Abhi requested response from ${target.name}.`;
+    if (!currentUserProfile) return;
+    const text = `System notification: ${currentUserProfile.name} requested response from ${target.name}.`;
+    
+    if (dbSynced && activeKompa) {
+      safeDbWrite(() => supabase.from('chat_messages').insert({
+        kompa_id: activeKompa.id,
+        sender_id: null, // System sender
+        text
+      }));
+    }
+
     const newMessage: ChatMessage = {
       id: `m_${Date.now()}`,
       senderId: 'system',
@@ -510,19 +731,19 @@ export default function App() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setChatMessages(prev => [...prev, newMessage]);
-    logFlow(`Abhi requested check status from ${target.name}`, 'system');
+    logFlow(`${currentUserProfile.name} requested check status from ${target.name}`, 'system');
     addPulse('Ping Sent', `Roommate ${target.name} has been notified.`, 'info');
   };
 
-  // Add Item to Shelf
+  // Add Item to Shelf Inventory
   const handleAddShelfItem = async () => {
-    if (!newShelfName.trim()) return;
+    if (!newShelfName.trim() || !activeKompa || !currentUserProfile) return;
 
     const newItem: ShelfItem = {
       id: `s_${Date.now()}`,
       name: newShelfName,
       status: 'low',
-      addedById: currentUser.id,
+      addedById: currentUserProfile.id,
       priority: newShelfPriority,
       visibility: newShelfVisibility,
       timestamp: 'Just now'
@@ -533,20 +754,22 @@ export default function App() {
 
     if (dbSynced) {
       safeDbWrite(() => supabase.from('shelf_items').insert({
+        kompa_id: activeKompa.id,
         name: newShelfName,
         status: 'low',
         priority: newShelfPriority,
-        added_by: currentUser.id,
+        added_by: currentUserProfile.id,
         visibility: newShelfVisibility
       }));
     }
 
-    logFlow(`Abhi added ${newShelfName} to Shelf requirements`, 'stocked');
-    addPulse('Inventory Update', `Abhi requested restocking of "${newShelfName}".`, 'info');
+    logFlow(`${currentUserProfile.name} requested restocking of "${newShelfName}"`, 'stocked');
+    addPulse('Inventory Update', `${currentUserProfile.name} marked "${newShelfName}" as low stock.`, 'info');
   };
 
-  // Restock item
+  // Toggle Restock status
   const handleToggleRestock = async (item: ShelfItem) => {
+    if (!currentUserProfile || !activeKompa) return;
     const isCurrentlyStocked = item.status === 'stocked';
     const newStatus = isCurrentlyStocked ? 'low' : 'stocked';
     
@@ -568,41 +791,148 @@ export default function App() {
     }
 
     if (newStatus === 'stocked') {
-      logFlow(`Abhi restocked item "${item.name}"`, 'stocked');
+      logFlow(`${currentUserProfile.name} restocked "${item.name}"`, 'stocked');
       addPulse('Stock Filled', `"${item.name}" has been restocked.`, 'success');
       confetti({
-        particleCount: 60,
-        spread: 45,
+        particleCount: 65,
+        spread: 50,
         origin: { y: 0.8 }
       });
     } else {
-      logFlow(`Abhi marked item "${item.name}" as running low`, 'alert');
+      logFlow(`${currentUserProfile.name} marked "${item.name}" as running low`, 'alert');
     }
     
     if (showShelfDetailsModal) setShowShelfDetailsModal(null);
   };
 
+  // Delete shelf item
+  const handleDeleteShelfItem = async (id: string) => {
+    const item = shelfItems.find(i => i.id === id);
+
+    setShelfItems(prev => prev.filter(i => i.id !== id));
+    setShowShelfDetailsModal(null);
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('shelf_items').delete().eq('id', id));
+    }
+
+    if (item && currentUserProfile) {
+      logFlow(`${currentUserProfile.name} removed "${item.name}" from inventory`, 'alert');
+    }
+  };
+
+  // Add Chore
+  const handleAddChore = async () => {
+    if (!newChoreTitle.trim() || !newChoreDueDate || !activeKompa) return;
+
+    const newChore: Task = {
+      id: `t_${Date.now()}`,
+      title: newChoreTitle,
+      assignedTo: newChoreAssignedTo,
+      dueDate: new Date(newChoreDueDate).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+      completed: false,
+      frequency: newChoreFrequency,
+      choreType: newChoreType
+    };
+
+    setTasks(prev => [newChore, ...prev]);
+    setShowAddChoreModal(false);
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('tasks').insert({
+        kompa_id: activeKompa.id,
+        title: newChoreTitle,
+        assigned_to: newChoreAssignedTo,
+        due_date: new Date(newChoreDueDate).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+        completed: false,
+        frequency: newChoreFrequency,
+        chore_type: newChoreType
+      }));
+    }
+
+    // Reset fields
+    setNewChoreTitle('');
+    setNewChoreDueDate('');
+    setNewChoreAssignedTo([]);
+    setNewChoreFrequency('weekly');
+    setNewChoreType('general');
+
+    if (currentUserProfile) {
+      logFlow(`${currentUserProfile.name} created chore "${newChore.title}"`, 'chore');
+    }
+  };
+
+  // Toggle Chore Completed
+  const handleToggleTask = async (task: Task) => {
+    const nextCompletedVal = !task.completed;
+
+    setTasks(prev => prev.map(t => {
+      if (t.id === task.id) {
+        return { ...t, completed: nextCompletedVal };
+      }
+      return t;
+    }));
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('tasks').update({
+        completed: nextCompletedVal
+      }).eq('id', task.id));
+    }
+
+    if (nextCompletedVal) {
+      // Trigger appropriate animated celebration clip
+      if (task.choreType === 'trash') {
+        setChoreAnimationType('trash');
+      } else if (task.choreType === 'kitchen') {
+        setChoreAnimationType('kitchen');
+      } else {
+        setChoreAnimationType('general');
+      }
+
+      if (currentUserProfile) {
+        logFlow(`${currentUserProfile.name} completed chore: "${task.title}"`, 'chore');
+        addPulse('Chore Completed', `Task "${task.title}" was completed by ${currentUserProfile.name}.`, 'success');
+      }
+    }
+  };
+
+  // Handle closing chore animation overlay
+  useEffect(() => {
+    if (choreAnimationType) {
+      const timer = setTimeout(() => {
+        setChoreAnimationType(null);
+        // Fire confetti celebration at the end of the graphic animation
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.65 }
+        });
+      }, 2500); // 2.5 seconds clip
+      return () => clearTimeout(timer);
+    }
+  }, [choreAnimationType]);
+
   // Start shopping run
   const handleStartRun = (store: string) => {
+    if (!currentUserProfile) return;
     const newRun: RunSession = {
       id: `run_${Date.now()}`,
-      shopperId: currentUser.id,
+      shopperId: currentUserProfile.id,
       store,
       status: 'active',
       requests: []
     };
     setActiveRun(newRun);
-    logFlow(`Abhi initiated a shopping Run at ${store}`, 'run');
-    addPulse('Run Started', `Abhi began shopping at ${store}. Send requests.`, 'info');
+    logFlow(`${currentUserProfile.name} initiated shopping run at ${store}`, 'run');
   };
 
   // Add request to Run
   const handleAddRunRequest = () => {
-    if (!newRequestName.trim() || !activeRun) return;
+    if (!newRequestName.trim() || !activeRun || !currentUserProfile) return;
     const newReq: RunRequest = {
       id: `req_${Date.now()}`,
       itemName: newRequestName,
-      requesterId: currentUser.id,
+      requesterId: currentUserProfile.id,
       status: 'pending'
     };
     setActiveRun({
@@ -610,10 +940,9 @@ export default function App() {
       requests: [...activeRun.requests, newReq]
     });
     setNewRequestName('');
-    logFlow(`Abhi added request for "${newReq.itemName}" to the active Run`, 'run');
   };
 
-  // Update Run Request
+  // Update Run Request status
   const handleUpdateRunRequestStatus = (reqId: string, status: RunRequest['status'], price?: number, replacementName?: string, replacementPrice?: number) => {
     if (!activeRun) return;
     setActiveRun({
@@ -625,23 +954,18 @@ export default function App() {
         return r;
       })
     });
-    
-    const req = activeRun.requests.find(r => r.id === reqId);
-    if (req) {
-      logFlow(`Updated shopping request "${req.itemName}" status to "${status}"`, 'run');
-    }
   };
 
-  // Complete Run & Checkout
+  // Complete Run & Settle Checkout
   const handleCheckoutRun = async () => {
-    if (!activeRun) return;
+    if (!activeRun || !activeKompa) return;
     
     const foundRequests = activeRun.requests.filter(r => r.status === 'found' || r.status === 'replaced');
     
-    // Save to Supabase Shelf
     if (dbSynced) {
       for (const r of foundRequests) {
         safeDbWrite(() => supabase.from('shelf_items').insert({
+          kompa_id: activeKompa.id,
           name: r.status === 'replaced' ? (r.replacementName || r.itemName) : r.itemName,
           status: 'stocked',
           priority: 'medium',
@@ -656,7 +980,7 @@ export default function App() {
       status: 'stocked' as const,
       addedById: r.requesterId,
       priority: 'medium' as const,
-      visibility: ['1', '2', '3', '4'],
+      visibility: [],
       timestamp: 'Just now'
     }));
 
@@ -665,14 +989,15 @@ export default function App() {
     const totalAmount = foundRequests.reduce((sum, r) => sum + (r.status === 'replaced' ? (r.replacementPrice || 0) : (r.price || 5.00)), 0);
     
     if (totalAmount > 0) {
-      const share = totalAmount / homemates.length;
+      const share = totalAmount / kompaMembers.length;
       const shares: Record<string, number> = {};
-      homemates.forEach(m => {
+      kompaMembers.forEach(m => {
         shares[m.id] = Number(share.toFixed(2));
       });
 
       if (dbSynced) {
         safeDbWrite(() => supabase.from('expenses').insert({
+          kompa_id: activeKompa.id,
           title: `Shopping Run: ${activeRun.store}`,
           amount: Number(totalAmount.toFixed(2)),
           payer_id: activeRun.shopperId,
@@ -689,12 +1014,15 @@ export default function App() {
         splitMethod: 'equal',
         shares,
         date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
-        visibility: ['1', '2', '3', '4']
+        visibility: []
       };
 
       setExpenses(prev => [newExpense, ...prev]);
-      logFlow(`Completed ${activeRun.store} Run. Split cost of $${totalAmount.toFixed(2)}`, 'split');
-      addPulse('Run Complete', `Run to ${activeRun.store} finished. Total cost split: $${totalAmount.toFixed(2)}.`, 'success');
+      
+      if (currentUserProfile) {
+        logFlow(`Finished ${activeRun.store} Run. Split cost $${totalAmount.toFixed(2)}`, 'split');
+        addPulse('Run Complete', `Run to ${activeRun.store} completed. Split details logged.`, 'success');
+      }
     }
 
     setActiveRun(null);
@@ -704,11 +1032,11 @@ export default function App() {
     });
   };
 
-  // Mock OCR Scan Action
+  // OCR presets triggers
   const triggerOCRScan = (store: 'Costco' | 'Walmart') => {
     setOcrScanning(true);
     setOcrResult(null);
-    setOcrProgress('Processing layout...');
+    setOcrProgress('Running parser...');
 
     setTimeout(() => {
       setOcrScanning(false);
@@ -739,7 +1067,7 @@ export default function App() {
     }, 2000);
   };
 
-  // Actual Image OCR Scan utilizing Tesseract.js (Open Source)
+  // OCR Custom Receipt upload
   const handleCustomImageOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -750,13 +1078,11 @@ export default function App() {
 
     try {
       const worker = await createWorker('eng');
-      setOcrProgress('Running OCR text extraction...');
+      setOcrProgress('Reading receipt characters...');
       const { data } = await worker.recognize(file);
       await worker.terminate();
 
       const text = data.text;
-      console.log('Extracted Raw Text:', text);
-
       const lines = text.split('\n');
       const detectedItems: Array<{ name: string; price: number }> = [];
       let totalValue = 0;
@@ -802,13 +1128,13 @@ export default function App() {
     }
   };
 
-  // Save Expense from OCR
+  // Save OCR receipt split bill
   const handleSaveOCRExpense = async () => {
-    if (!ocrResult) return;
+    if (!ocrResult || !activeKompa || !currentUserProfile) return;
 
-    const share = ocrResult.total / homemates.length;
+    const share = ocrResult.total / kompaMembers.length;
     const shares: Record<string, number> = {};
-    homemates.forEach(m => {
+    kompaMembers.forEach(m => {
       shares[m.id] = Number(share.toFixed(2));
     });
 
@@ -816,11 +1142,11 @@ export default function App() {
       id: `e_${Date.now()}`,
       title: `OCR Scan: ${ocrResult.merchant}`,
       amount: ocrResult.total,
-      payerId: currentUser.id,
+      payerId: currentUserProfile.id,
       splitMethod: 'equal',
       shares,
       date: ocrResult.date,
-      visibility: ['1', '2', '3', '4']
+      visibility: []
     };
 
     setExpenses(prev => [newExpense, ...prev]);
@@ -829,15 +1155,16 @@ export default function App() {
 
     if (dbSynced) {
       safeDbWrite(() => supabase.from('expenses').insert({
+        kompa_id: activeKompa.id,
         title: `OCR Scan: ${ocrResult.merchant}`,
         amount: ocrResult.total,
-        payer_id: currentUser.id,
+        payer_id: currentUserProfile.id,
         split_method: 'equal',
         shares
       }));
     }
 
-    // Auto-restock matching Shelf items
+    // Auto-restock matching items
     const itemNamesLower = ocrResult.items.map((i: any) => i.name.toLowerCase());
     setShelfItems(prev => prev.map(s => {
       const match = itemNamesLower.some((name: string) => name.includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(name));
@@ -850,21 +1177,17 @@ export default function App() {
       return s;
     }));
 
-    logFlow(`Uploaded OCR receipt analysis for ${ocrResult.merchant} ($${ocrResult.total})`, 'split');
-    addPulse('Receipt Processed', `Receipt for ${ocrResult.merchant} ($${ocrResult.total}) verified.`, 'success');
-    confetti({
-      particleCount: 50,
-      spread: 40
-    });
+    logFlow(`Logged OCR receipt split for ${ocrResult.merchant}`, 'split');
+    addPulse('Receipt Processed', `Receipt cost of $${ocrResult.total.toFixed(2)} logged.`, 'success');
   };
 
-  // Manual Add Expense
+  // Add Manual Expense
   const handleAddManualExpense = async () => {
     const amt = parseFloat(newExpAmount);
-    if (!newExpTitle.trim() || isNaN(amt) || amt <= 0) return;
+    if (!newExpTitle.trim() || isNaN(amt) || amt <= 0 || !activeKompa) return;
 
     const shares: Record<string, number> = {};
-    const activeMembers = newExpVisibility;
+    const activeMembers = newExpVisibility.length > 0 ? newExpVisibility : kompaMembers.map(m => m.id);
     const share = amt / activeMembers.length;
     activeMembers.forEach(id => {
       shares[id] = Number(share.toFixed(2));
@@ -888,6 +1211,7 @@ export default function App() {
 
     if (dbSynced) {
       safeDbWrite(() => supabase.from('expenses').insert({
+        kompa_id: activeKompa.id,
         title: newExpTitle,
         amount: amt,
         payer_id: newExpPayer,
@@ -896,57 +1220,15 @@ export default function App() {
       }));
     }
 
-    logFlow(`Abhi logged manual transaction "${newExpTitle}" ($${amt.toFixed(2)})`, 'split');
-  };
-
-  // Toggle Chore status
-  const handleToggleTask = async (task: Task) => {
-    const nextCompletedVal = !task.completed;
-
-    setTasks(prev => prev.map(t => {
-      if (t.id === task.id) {
-        return { ...t, completed: nextCompletedVal };
-      }
-      return t;
-    }));
-
-    if (dbSynced) {
-      safeDbWrite(() => supabase.from('tasks').update({
-        completed: nextCompletedVal
-      }).eq('id', task.id));
-    }
-
-    if (nextCompletedVal) {
-      logFlow(`Marked chore as complete: "${task.title}"`, 'chore');
-      addPulse('Chore Completed', `Task "${task.title}" completed.`, 'success');
-      confetti({
-        particleCount: 30,
-        spread: 30,
-        origin: { y: 0.85 }
-      });
+    if (currentUserProfile) {
+      logFlow(`${currentUserProfile.name} logged transaction "${newExpTitle}" ($${amt.toFixed(2)})`, 'split');
     }
   };
 
-  // Delete Shelf Item
-  const handleDeleteShelfItem = async (id: string) => {
-    const item = shelfItems.find(i => i.id === id);
+  const optimizedDebts = getOptimizedDebts(expenses, kompaMembers);
+  const netBalances = calculateBalances(expenses, kompaMembers);
 
-    setShelfItems(prev => prev.filter(i => i.id !== id));
-    setShowShelfDetailsModal(null);
-
-    if (dbSynced) {
-      safeDbWrite(() => supabase.from('shelf_items').delete().eq('id', id));
-    }
-
-    if (item) {
-      logFlow(`Removed item "${item.name}" from inventory catalog`, 'alert');
-    }
-  };
-
-  const optimizedDebts = getOptimizedDebts(expenses, homemates);
-  const netBalances = calculateBalances(expenses, homemates);
-
-  // Render a clean initials avatar
+  // Render initials avatar helper
   const renderInitialsAvatar = (member: Homemate, size: number = 38) => {
     return (
       <div style={{
@@ -968,7 +1250,7 @@ export default function App() {
     );
   };
 
-  // Render custom vector icons for timeline logs
+  // Render customized vector icons for House Flow
   const renderFlowIcon = (type: FlowLog['type']) => {
     switch (type) {
       case 'alert':
@@ -978,7 +1260,7 @@ export default function App() {
       case 'chore':
         return <CheckSquare size={14} style={{ color: 'var(--accent-emerald)' }} />;
       case 'split':
-        return <DollarSign size={14} style={{ color: 'var(--accent-purple)' }} />;
+        return <DollarSign size={14} style={{ color: 'var(--accent-amber)' }} />;
       case 'stocked':
         return <Check size={14} style={{ color: 'var(--accent-emerald)' }} />;
       default:
@@ -986,6 +1268,156 @@ export default function App() {
     }
   };
 
+  // AUTHENTICATION SCREEN VIEW
+  if (!session || !currentUserProfile) {
+    return (
+      <div className="bg-blobs" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div className="blob blob-1"></div>
+        <div className="blob blob-2"></div>
+        <div className="blob blob-3"></div>
+
+        <div className="glass-card" style={{ width: '90%', maxWidth: '380px', padding: '28px', border: '1px solid rgba(30, 58, 138, 0.08)' }}>
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <h2 className="brand-title" style={{ justifyContent: 'center', fontSize: '1.8rem' }}>
+              <Sparkles size={26} style={{ color: '#2563eb' }} />
+              Deyibe
+            </h2>
+            <p style={{ fontSize: '0.78rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700, marginTop: '2px' }}>
+              Kompa Operating System
+            </p>
+          </div>
+
+          <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {authMode === 'signup' && (
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Your Nickname</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Abhi" 
+                  value={authName} 
+                  onChange={e => setAuthName(e.target.value)} 
+                  required 
+                  style={{ marginTop: '4px' }}
+                />
+              </div>
+            )}
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Email Address</label>
+              <input 
+                type="email" 
+                placeholder="you@email.com" 
+                value={authEmail} 
+                onChange={e => setAuthEmail(e.target.value)} 
+                required 
+                style={{ marginTop: '4px' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Password</label>
+              <input 
+                type="password" 
+                placeholder="••••••••" 
+                value={authPassword} 
+                onChange={e => setAuthPassword(e.target.value)} 
+                required 
+                style={{ marginTop: '4px' }}
+              />
+            </div>
+
+            <button type="submit" className="btn-primary" style={{ width: '100%', padding: '12px', marginTop: '8px' }} disabled={authLoading}>
+              {authLoading ? <RefreshCw size={16} className="animate-spin" style={{ margin: '0 auto' }} /> : authMode === 'login' ? 'Sign In' : 'Create Account'}
+            </button>
+          </form>
+
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px', fontSize: '0.8rem' }}>
+            <span style={{ color: '#64748b' }}>
+              {authMode === 'login' ? "Don't have an account?" : "Already have an account?"}
+              <button 
+                onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
+                style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, marginLeft: '4px', cursor: 'pointer' }}
+              >
+                {authMode === 'login' ? 'Sign Up' : 'Sign In'}
+              </button>
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // NO KOMPA JOINED SCREEN VIEW
+  if (joinedKompas.length === 0) {
+    return (
+      <div className="bg-blobs" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div className="blob blob-1"></div>
+        <div className="blob blob-2"></div>
+        <div className="blob blob-3"></div>
+
+        <div className="glass-card" style={{ width: '90%', maxWidth: '380px', padding: '26px', border: '1px solid rgba(30, 58, 138, 0.08)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+            <div>
+              <h3 style={{ fontSize: '1rem', color: '#475569' }}>Hello, {currentUserProfile.name}!</h3>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginTop: '2px', color: '#0f172a' }}>
+                Ready to Join a <span className="kompa-highlight">Kompa</span>
+              </h2>
+            </div>
+            <button onClick={handleSignOut} style={{ padding: '6px', borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center' }}>
+              <LogOut size={16} style={{ color: '#475569' }} />
+            </button>
+          </div>
+
+          <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5, marginBottom: '22px' }}>
+            A <i>Kompa</i> is a shared house space. Create a new one or join an existing one using an invite code to coordinate chores and expenses with roommates!
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="glass-card" style={{ padding: '12px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.04)' }}>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>Create new Kompa</h4>
+              <input 
+                type="text" 
+                placeholder="e.g. Abhi's Suite" 
+                value={kompaNameInput} 
+                onChange={e => setKompaNameInput(e.target.value)} 
+                style={{ padding: '8px' }}
+              />
+              <button 
+                className="btn-primary" 
+                style={{ width: '100%', padding: '8px', fontSize: '0.78rem', marginTop: '8px' }} 
+                onClick={handleCreateKompa}
+                disabled={dbLoading}
+              >
+                {dbLoading ? 'Creating...' : 'Create Kompa'}
+              </button>
+            </div>
+
+            <div style={{ textAlign: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', margin: '4px 0' }}>OR</div>
+
+            <div className="glass-card" style={{ padding: '12px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.04)' }}>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>Join existing Kompa</h4>
+              <input 
+                type="text" 
+                placeholder="Enter 6-digit invite code" 
+                value={kompaCodeInput} 
+                onChange={e => setKompaCodeInput(e.target.value)} 
+                maxLength={6}
+                style={{ padding: '8px' }}
+              />
+              <button 
+                className="btn-secondary" 
+                style={{ width: '100%', padding: '8px', fontSize: '0.78rem', marginTop: '8px' }} 
+                onClick={handleJoinKompa}
+                disabled={dbLoading}
+              >
+                {dbLoading ? 'Joining...' : 'Join with Code'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // MAIN APPLICATION PANEL
   return (
     <>
       <div className="bg-blobs">
@@ -994,57 +1426,223 @@ export default function App() {
         <div className="blob blob-3"></div>
       </div>
 
+      {/* CHORE COMPLETION CELEBRATION FULL-SCREEN OVERLAYS */}
+      {choreAnimationType && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(30, 58, 138, 0.92)', backdropFilter: 'blur(10px)',
+          display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+          zIndex: 99999, color: 'white', animation: 'fadeIn 0.25s ease-out'
+        }}>
+          {choreAnimationType === 'trash' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+              {/* Garbage bags thrown to a dustbin graphic SVG */}
+              <svg width="150" height="150" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
+                <defs>
+                  <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000" floodOpacity="0.15" />
+                  </filter>
+                </defs>
+                {/* Dustbin Can body */}
+                <rect x="35" y="45" width="30" height="40" rx="4" fill="#64748b" filter="url(#shadow)" />
+                {/* Lid (closed container status initially) */}
+                <rect x="31" y="38" width="38" height="6" rx="2" fill="#475569" style={{
+                  transformOrigin: '50px 38px',
+                  animation: 'lidOpen 2.2s cubic-bezier(0.25, 1, 0.5, 1) infinite'
+                }} />
+                {/* Stripe textures */}
+                <line x1="41" y1="52" x2="41" y2="78" stroke="#475569" strokeWidth="2" strokeLinecap="round" />
+                <line x1="50" y1="52" x2="50" y2="78" stroke="#475569" strokeWidth="2" strokeLinecap="round" />
+                <line x1="59" y1="52" x2="59" y2="78" stroke="#475569" strokeWidth="2" strokeLinecap="round" />
+                
+                {/* Trash Bag falling in */}
+                <path d="M 40,0 C 35,5 35,12 42,15 C 45,16 55,16 58,15 C 65,12 65,5 60,0 C 53,5 47,5 40,0 Z" fill="#b45309" style={{
+                  animation: 'bagDrop 2.2s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite'
+                }} />
+                {/* Knot tie on bag */}
+                <circle cx="50" cy="-4" r="3" fill="#92400e" style={{
+                  animation: 'bagDropKnot 2.2s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite'
+                }} />
+              </svg>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fcd34d', textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>Garbage Bag Disposed!</h2>
+              <p style={{ fontSize: '0.85rem', opacity: 0.8 }}>Nice job keeping the room clean.</p>
+            </div>
+          )}
+
+          {/* UTENSILS OR KITCHEN CLEANING CELEBRATION */}
+          {choreAnimationType === 'kitchen' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+              {/* Dishes scrubbing vector SVG */}
+              <svg width="150" height="150" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
+                {/* Dish Plate */}
+                <circle cx="50" cy="50" r="30" fill="none" stroke="white" strokeWidth="3" style={{
+                  animation: 'dishSpin 2s linear infinite'
+                }} />
+                <circle cx="50" cy="50" r="20" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1" strokeDasharray="4 4" style={{
+                  animation: 'dishSpin 2s linear infinite'
+                }} />
+                
+                {/* Sparkle star */}
+                <path d="M 50,15 L 53,24 L 62,27 L 53,30 L 50,39 L 47,30 L 38,27 L 47,24 Z" fill="#fbbf24" style={{
+                  animation: 'sparkleFlash 1.5s ease-in-out infinite'
+                }} />
+                <path d="M 80,45 L 82,50 L 87,52 L 82,54 L 80,59 L 78,54 L 73,52 L 78,50 Z" fill="#fbbf24" style={{
+                  animation: 'sparkleFlash 1.5s ease-in-out infinite',
+                  animationDelay: '0.4s'
+                }} />
+                
+                {/* Foam / Soap bubbles */}
+                <circle cx="32" cy="65" r="5" fill="rgba(255,255,255,0.85)" />
+                <circle cx="68" cy="65" r="4" fill="rgba(255,255,255,0.95)" />
+                <circle cx="62" cy="72" r="6" fill="rgba(255,255,255,0.75)" style={{
+                  animation: 'bubbleFloat 1.8s ease-in-out infinite'
+                }} />
+                <circle cx="38" cy="74" r="5" fill="rgba(255,255,255,0.8)" style={{
+                  animation: 'bubbleFloat 1.8s ease-in-out infinite',
+                  animationDelay: '0.5s'
+                }} />
+              </svg>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fcd34d', textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>Kitchen Sparkly Clean!</h2>
+              <p style={{ fontSize: '0.85rem', opacity: 0.8 }}>Utensils sorted and polished.</p>
+            </div>
+          )}
+
+          {choreAnimationType === 'general' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+              <Sparkles size={40} style={{ color: '#fbbf24' }} className="animate-bounce" />
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fbbf24' }}>Chore Accomplished!</h2>
+              <p style={{ fontSize: '0.85rem', opacity: 0.8 }}>Thank you for helping out.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SVG Animation Keyframes */}
+      <style>{`
+        @keyframes lidOpen {
+          0% { transform: rotate(0deg); }
+          25% { transform: rotate(-45deg) translate(-5px, -5px); }
+          75% { transform: rotate(-45deg) translate(-5px, -5px); }
+          100% { transform: rotate(0deg); }
+        }
+        @keyframes bagDrop {
+          0% { transform: translateY(-50px) scale(0.9); opacity: 0; }
+          30% { transform: translateY(48px) scale(1); opacity: 1; }
+          75% { transform: translateY(48px) scale(1); opacity: 1; }
+          100% { transform: translateY(48px) scale(0.4); opacity: 0; }
+        }
+        @keyframes bagDropKnot {
+          0% { transform: translateY(-50px); opacity: 0; }
+          30% { transform: translateY(48px); opacity: 1; }
+          75% { transform: translateY(48px); opacity: 1; }
+          100% { transform: translateY(48px) scale(0.4); opacity: 0; }
+        }
+        @keyframes dishSpin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes sparkleFlash {
+          0%, 100% { transform: scale(0.8); opacity: 0.3; }
+          50% { transform: scale(1.2); opacity: 1; }
+        }
+        @keyframes bubbleFloat {
+          0% { transform: translateY(0) scale(1); opacity: 0.8; }
+          50% { transform: translateY(-6px) scale(1.1); opacity: 1; }
+          100% { transform: translateY(0) scale(1); opacity: 0.8; }
+        }
+      `}</style>
+
       <div className="app-container">
         
         {/* App Header */}
         <header className="app-header">
-          <div>
-            <div className="brand-title">
-              <Sparkles size={20} style={{ color: 'var(--accent-purple)' }} />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="brand-title" style={{ gap: '6px' }}>
+              <Layers size={18} style={{ color: '#2563eb' }} />
               Deyibe
             </div>
-            <div className="brand-subtitle">Home Operating System</div>
+            
+            {/* Active Kompa Switcher */}
+            {activeKompa && (
+              <select 
+                value={activeKompa.id} 
+                onChange={e => {
+                  const target = joinedKompas.find(k => k.id === e.target.value);
+                  if (target) setActiveKompa(target);
+                }}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  padding: '2px 0 0 0',
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  color: '#1e3a8a',
+                  width: 'fit-content',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                {joinedKompas.map(k => (
+                  <option key={k.id} value={k.id}>{k.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {/* Database Sync Status indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            
+            {/* 6 Glowing Status indicator */}
             <div 
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px',
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                padding: '4px 8px',
-                borderRadius: '8px',
-                background: dbSynced ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                color: dbSynced ? '#059669' : '#d97706',
+                justifyContent: 'center',
+                padding: '4px',
                 cursor: 'pointer'
               }}
               onClick={() => setShowDbAlert(true)}
             >
-              <Database size={12} />
-              {dbLoading ? 'Connecting...' : dbSynced ? 'Synced' : 'Local'}
+              {dbSynced ? (
+                <span className="sync-glowing-light" title="Realtime Synced to Supabase"></span>
+              ) : (
+                <span className="local-glowing-light" title="Local Mode"></span>
+              )}
             </div>
 
             <div className="pulse-badge" onClick={() => setShowPulse(!showPulse)}>
               <Bell size={18} />
               {pulseAlerts.some(a => !a.read) && <span className="pulse-indicator"></span>}
             </div>
+
+            {/* Logout button */}
+            <button 
+              onClick={handleSignOut} 
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#475569',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '6px',
+                borderRadius: '50%'
+              }}
+            >
+              <LogOut size={16} />
+            </button>
           </div>
         </header>
 
         {/* Database Warning/Info Alert banner */}
         {showDbAlert && (
           <div style={{
-            background: dbSynced ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+            background: dbSynced ? 'rgba(4, 120, 87, 0.08)' : 'rgba(180, 83, 9, 0.08)',
             borderBottom: '1px solid rgba(0, 0, 0, 0.04)',
             padding: '10px 16px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             fontSize: '0.78rem',
-            color: dbSynced ? '#059669' : '#d97706',
+            color: dbSynced ? '#047857' : '#b45309',
             fontWeight: 600,
             zIndex: 5
           }}>
@@ -1052,19 +1650,92 @@ export default function App() {
               <Info size={14} style={{ flexShrink: 0 }} />
               <span>
                 {dbSynced 
-                  ? 'Connected and syncing with Supabase!' 
-                  : 'Offline sandbox mode. Execute SQL schemas in Supabase to sync.'}
+                  ? 'Pulsing green: Realtime connection active. Database tables synced.' 
+                  : 'Pulsing amber: Local memory sandbox. Execute SQL in Supabase editor to activate.'}
               </span>
             </span>
             <X size={14} className="cursor-pointer" onClick={() => setShowDbAlert(false)} style={{ flexShrink: 0 }} />
           </div>
         )}
 
-        {/* Pulse Notifications Dropdown */}
+        {/* Settings / Invite panel for active Kompa */}
+        {activeKompa && (
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.4)',
+            padding: '6px 16px',
+            borderBottom: '1px solid rgba(0,0,0,0.03)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: '0.75rem',
+            color: '#64748b'
+          }}>
+            <span>Invite Code: <strong style={{ color: '#b45309' }}>{activeKompa.inviteCode}</strong></span>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <span 
+                style={{ cursor: 'pointer', color: '#2563eb', fontWeight: 700 }}
+                onClick={() => {
+                  navigator.clipboard.writeText(activeKompa.inviteCode);
+                  alert('Invite Code copied to clipboard!');
+                }}
+              >
+                Copy
+              </span>
+              <span 
+                style={{ cursor: 'pointer', color: 'var(--accent-rose)', fontWeight: 700 }}
+                onClick={handleDeleteLeaveKompa}
+              >
+                {activeKompa.ownerId === currentUserProfile.id ? 'Delete' : 'Leave'}
+              </span>
+              <span 
+                style={{ cursor: 'pointer', color: '#1e3a8a', fontWeight: 700 }}
+                onClick={() => {
+                  const name = prompt('Enter a new custom name for this Kompa:');
+                  if (name && name.trim()) {
+                    safeDbWrite(() => supabase.from('kompas').update({ name }).eq('id', activeKompa.id));
+                    setActiveKompa({ ...activeKompa, name });
+                    fetchUserKompas(currentUserProfile.id);
+                  }
+                }}
+              >
+                Rename
+              </span>
+              <span 
+                style={{ cursor: 'pointer', color: '#1e3a8a', fontWeight: 700 }}
+                onClick={() => {
+                  if (joinedKompas.length >= 3) {
+                    alert('Create limit reached (max 3).');
+                  } else {
+                    const name = prompt('Enter name for the new Kompa:');
+                    if (name && name.trim()) {
+                      setKompaNameInput(name);
+                      handleCreateKompa();
+                    }
+                  }
+                }}
+              >
+                + New
+              </span>
+              <span 
+                style={{ cursor: 'pointer', color: '#1e3a8a', fontWeight: 700 }}
+                onClick={() => {
+                  const code = prompt('Enter 6-digit code to join another Kompa:');
+                  if (code && code.trim()) {
+                    setKompaCodeInput(code);
+                    handleJoinKompa();
+                  }
+                }}
+              >
+                + Join
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Pulse Notification drop panel */}
         {showPulse && (
           <div className="glass-card" style={{
             position: 'absolute',
-            top: '75px',
+            top: '110px',
             right: '15px',
             left: '15px',
             zIndex: 100,
@@ -1084,7 +1755,7 @@ export default function App() {
                   setPulseAlerts(prev => prev.map(a => ({ ...a, read: true })));
                   setShowPulse(false);
                 }} 
-                style={{ fontSize: '0.75rem', background: 'none', border: 'none', color: 'var(--accent-purple)', fontWeight: 700 }}
+                style={{ fontSize: '0.75rem', background: 'none', border: 'none', color: '#2563eb', fontWeight: 700 }}
               >
                 Clear all
               </button>
@@ -1127,14 +1798,14 @@ export default function App() {
                     fontSize: '1.3rem', 
                     fontWeight: 800, 
                     marginTop: '2px',
-                    color: netBalances[currentUser.id] >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'
+                    color: (netBalances[currentUserProfile.id] || 0) >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'
                   }}>
-                    {netBalances[currentUser.id] >= 0 ? '+' : ''}${netBalances[currentUser.id].toFixed(2)}
+                    {(netBalances[currentUserProfile.id] || 0) >= 0 ? '+' : ''}${(netBalances[currentUserProfile.id] || 0).toFixed(2)}
                   </div>
                 </div>
                 <div className="glass-card" style={{ flex: 1, padding: '14px', marginBottom: 0, textAlign: 'center', cursor: 'pointer' }} onClick={() => setActiveTab('shelf')}>
                   <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Out of Stock</div>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, marginTop: '2px', color: 'var(--accent-blue)' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, marginTop: '2px', color: '#2563eb' }}>
                     {shelfItems.filter(i => i.status === 'out' || i.status === 'low').length} Items
                   </div>
                 </div>
@@ -1144,7 +1815,7 @@ export default function App() {
               {activeRun && (
                 <div className="glass-card" style={{
                   borderLeft: '4px solid var(--accent-blue)',
-                  background: 'rgba(59, 130, 246, 0.05)',
+                  background: 'rgba(37, 99, 235, 0.05)',
                   padding: '12px 14px',
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -1154,7 +1825,7 @@ export default function App() {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>
                       <span className="run-dot"></span>
-                      Shopping Session: {homemates.find(h => h.id === activeRun.shopperId)?.name} @ {activeRun.store}
+                      Shopping Session: {kompaMembers.find(h => h.id === activeRun.shopperId)?.name} @ {activeRun.store}
                     </div>
                     <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
                       {activeRun.requests.length} requests active. Tap to view requests.
@@ -1168,14 +1839,14 @@ export default function App() {
               <div className="glass-card" style={{ padding: '14px' }}>
                 <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Homemates</h3>
                 <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', paddingBottom: '4px' }}>
-                  {homemates.map(m => (
+                  {kompaMembers.map(m => (
                     <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '60px' }}>
                       <div 
                         style={{ cursor: 'pointer', position: 'relative' }} 
-                        onClick={() => m.id !== currentUser.id && handleBuzz(m)}
+                        onClick={() => m.id !== currentUserProfile.id && handleBuzz(m)}
                       >
                         {renderInitialsAvatar(m, 44)}
-                        {m.id !== currentUser.id && (
+                        {m.id !== currentUserProfile.id && (
                           <div style={{
                             position: 'absolute',
                             bottom: -2,
@@ -1207,52 +1878,135 @@ export default function App() {
                     <CheckSquare size={16} style={{ color: 'var(--accent-emerald)' }} />
                     Active Chores
                   </h3>
-                  <span style={{ fontSize: '0.7rem', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
-                    {tasks.filter(t => !t.completed).length} Pending
-                  </span>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.7rem', background: 'rgba(4, 120, 87, 0.1)', color: '#047857', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                      {tasks.filter(t => !t.completed).length} Pending
+                    </span>
+                    <button className="btn-primary" style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem' }} onClick={() => setShowAddChoreModal(true)}>
+                      Assign
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {tasks.map(task => (
-                    <div 
-                      key={task.id} 
-                      onClick={() => handleToggleTask(task)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        padding: '8px 10px',
-                        borderRadius: '8px',
-                        background: 'rgba(255,255,255,0.4)',
-                        border: '1px solid rgba(0, 0, 0, 0.03)',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                        opacity: task.completed ? 0.5 : 1
-                      }}
-                    >
-                      {task.completed ? (
-                        <CheckSquare size={16} style={{ color: 'var(--accent-emerald)' }} />
-                      ) : (
-                        <Square size={16} style={{ color: 'rgba(0,0,0,0.25)' }} />
-                      )}
-                      <div style={{ flex: 1 }}>
-                        <div style={{ 
-                          fontSize: '0.85rem', 
-                          fontWeight: 600,
-                          textDecoration: task.completed ? 'line-through' : 'none',
-                          color: '#1e293b'
-                        }}>
-                          {task.title}
-                        </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px', display: 'flex', gap: '6px' }}>
-                          <span>Due: {task.dueDate}</span>
-                          <span>•</span>
-                          <span>Assigned: {task.assignedTo.map(id => homemates.find(h => h.id === id)?.name).join(', ')}</span>
+
+                {tasks.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8rem', padding: '14px 0' }}>No chores configured. Click Assign to create!</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {tasks.map(task => (
+                      <div 
+                        key={task.id} 
+                        onClick={() => handleToggleTask(task)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '8px 10px',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.4)',
+                          border: '1px solid rgba(0, 0, 0, 0.03)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          opacity: task.completed ? 0.5 : 1
+                        }}
+                      >
+                        {task.completed ? (
+                          <CheckSquare size={16} style={{ color: 'var(--accent-emerald)' }} />
+                        ) : (
+                          <Square size={16} style={{ color: 'rgba(0,0,0,0.25)' }} />
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ 
+                            fontSize: '0.85rem', 
+                            fontWeight: 600,
+                            textDecoration: task.completed ? 'line-through' : 'none',
+                            color: '#1e293b'
+                          }}>
+                            {task.title}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px', display: 'flex', gap: '6px' }}>
+                            <span>Due: {task.dueDate}</span>
+                            <span>•</span>
+                            <span>Assigned: {task.assignedTo.map(id => kompaMembers.find(h => h.id === id)?.name).join(', ')}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {/* Add Chore Modal */}
+              {showAddChoreModal && (
+                <div style={{
+                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+                }}>
+                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Assign Chore</h3>
+                      <X size={18} className="cursor-pointer" onClick={() => setShowAddChoreModal(false)} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Title</label>
+                        <input type="text" placeholder="e.g. Throw garbage, Clean plates" value={newChoreTitle} onChange={e => setNewChoreTitle(e.target.value)} style={{ marginTop: '4px' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Chore Type (Graphic Specific)</label>
+                        <select value={newChoreType} onChange={e => setNewChoreType(e.target.value as any)} style={{ marginTop: '4px' }}>
+                          <option value="general">General (Standard Confetti)</option>
+                          <option value="trash">Trash (Garbage bag falling animation)</option>
+                          <option value="kitchen">Kitchen / Utensils (Plate washing animation)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Due Date</label>
+                        <input type="date" value={newChoreDueDate} onChange={e => setNewChoreDueDate(e.target.value)} style={{ marginTop: '4px' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Frequency</label>
+                        <select value={newChoreFrequency} onChange={e => setNewChoreFrequency(e.target.value as any)} style={{ marginTop: '4px' }}>
+                          <option value="once">Once</option>
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Assign Roommates</label>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                          {kompaMembers.map(m => (
+                            <button
+                              key={m.id}
+                              style={{
+                                padding: '5px 8px', fontSize: '0.72rem', borderRadius: '6px',
+                                border: '1px solid rgba(0,0,0,0.06)',
+                                background: newChoreAssignedTo.includes(m.id) ? '#2563eb' : 'rgba(0,0,0,0.02)',
+                                color: newChoreAssignedTo.includes(m.id) ? 'white' : '#475569'
+                              }}
+                              onClick={() => {
+                                if (newChoreAssignedTo.includes(m.id)) {
+                                  setNewChoreAssignedTo(newChoreAssignedTo.filter(id => id !== m.id));
+                                } else {
+                                  setNewChoreAssignedTo([...newChoreAssignedTo, m.id]);
+                                }
+                              }}
+                            >
+                              {m.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                        <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setShowAddChoreModal(false)}>Cancel</button>
+                        <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleAddChore}>Assign</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Activity Timeline (Flow) */}
               <div className="glass-card">
@@ -1297,7 +2051,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 2: SHELF (MINIMALIST DASHBOARD GRID) */}
+          {/* TAB 2: SHELF (MINIMALIST CATALOG) */}
           {activeTab === 'shelf' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -1332,7 +2086,7 @@ export default function App() {
                         {item.status === 'stocked' ? 'Stocked' : item.status === 'low' ? 'Low Stock' : 'Out of stock'}
                       </span>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', color: '#94a3b8', marginTop: '6px', fontWeight: 500 }}>
-                        <span>by {homemates.find(h => h.id === item.addedById)?.name}</span>
+                        <span>by {kompaMembers.find(h => h.id === item.addedById)?.name}</span>
                         <span>{item.timestamp}</span>
                       </div>
                     </div>
@@ -1364,31 +2118,6 @@ export default function App() {
                           <option value="medium">Medium (Regular)</option>
                           <option value="low">Low (Optional)</option>
                         </select>
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Visibility Scope</label>
-                        <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
-                          {homemates.map(h => (
-                            <button
-                              key={h.id}
-                              style={{
-                                padding: '5px 8px', fontSize: '0.72rem', borderRadius: '6px',
-                                border: '1px solid rgba(0,0,0,0.06)',
-                                background: newShelfVisibility.includes(h.id) ? 'var(--accent-purple)' : 'rgba(0,0,0,0.02)',
-                                color: newShelfVisibility.includes(h.id) ? 'white' : '#475569'
-                              }}
-                              onClick={() => {
-                                if (newShelfVisibility.includes(h.id)) {
-                                  setNewShelfVisibility(newShelfVisibility.filter(id => id !== h.id));
-                                } else {
-                                  setNewShelfVisibility([...newShelfVisibility, h.id]);
-                                }
-                              }}
-                            >
-                              {h.name}
-                            </button>
-                          ))}
-                        </div>
                       </div>
                       <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                         <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setShowAddShelfModal(false)}>Cancel</button>
@@ -1422,7 +2151,7 @@ export default function App() {
                       <div>
                         <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>{showShelfDetailsModal.name}</h2>
                         <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
-                          Registered {showShelfDetailsModal.timestamp} by {homemates.find(h => h.id === showShelfDetailsModal.addedById)?.name}
+                          Registered by {kompaMembers.find(h => h.id === showShelfDetailsModal.addedById)?.name || 'Roommate'}
                         </p>
                       </div>
 
@@ -1474,14 +2203,14 @@ export default function App() {
                 <div className="glass-card" style={{ padding: '30px 16px', textAlign: 'center' }}>
                   <div style={{
                     width: '54px', height: '54px', borderRadius: '50%',
-                    background: 'rgba(59, 130, 246, 0.08)', display: 'flex',
+                    background: 'rgba(37, 99, 235, 0.08)', display: 'flex',
                     alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px'
                   }}>
                     <ShoppingCart size={24} style={{ color: 'var(--accent-blue)' }} />
                   </div>
                   <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '4px' }}>No Active Session</h3>
                   <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '16px' }}>
-                    Shopping at a local store? Initiate a session to alert your homemates for requests.
+                    Shopping at a local store? Initiate a session to alert your roommates for requests.
                   </p>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1498,7 +2227,7 @@ export default function App() {
                           LIVE COLLABORATION ACTIVE
                         </div>
                         <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '2px', color: '#0f172a' }}>
-                          {homemates.find(h => h.id === activeRun.shopperId)?.name}'s {activeRun.store} Run
+                          {kompaMembers.find(h => h.id === activeRun.shopperId)?.name}'s {activeRun.store} Run
                         </h3>
                       </div>
                       <span className="run-dot"></span>
@@ -1529,7 +2258,7 @@ export default function App() {
                                 {req.itemName}
                               </div>
                               <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px' }}>
-                                Requested by: {homemates.find(h => h.id === req.requesterId)?.name}
+                                Requested by: {kompaMembers.find(h => h.id === req.requesterId)?.name}
                               </div>
                             </div>
                             
@@ -1558,8 +2287,8 @@ export default function App() {
                               ) : (
                                 <span style={{
                                   fontSize: '0.7rem', fontWeight: 800, padding: '3px 6px', borderRadius: '4px',
-                                  background: req.status === 'found' ? 'rgba(16, 185, 129, 0.1)' : req.status === 'replaced' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(244, 63, 94, 0.1)',
-                                  color: req.status === 'found' ? '#059669' : req.status === 'replaced' ? '#d97706' : '#e11d48',
+                                  background: req.status === 'found' ? 'rgba(4, 120, 87, 0.1)' : req.status === 'replaced' ? 'rgba(180, 83, 9, 0.1)' : 'rgba(185, 28, 28, 0.1)',
+                                  color: req.status === 'found' ? '#047857' : req.status === 'replaced' ? '#b45309' : '#b91c1c',
                                   textTransform: 'uppercase'
                                 }}>
                                   {req.status} {req.price && `($${req.price})`}
@@ -1586,7 +2315,7 @@ export default function App() {
 
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setActiveRun(null)}>Cancel Run</button>
-                    <button className="btn-primary" style={{ flex: 1, padding: '9px', background: 'linear-gradient(135deg, var(--accent-blue) 0%, #2563eb 100%)', boxShadow: '0 4px 12px var(--accent-blue-glow)' }} onClick={handleCheckoutRun}>
+                    <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleCheckoutRun}>
                       Complete Checkout
                     </button>
                   </div>
@@ -1595,7 +2324,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 4: SPLIT & SETTLE (Smart Expense splitting) */}
+          {/* TAB 4: SPLIT & SETTLE */}
           {activeTab === 'split' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -1618,7 +2347,7 @@ export default function App() {
               </div>
 
               {/* Debt suggestions widget */}
-              <div className="glass-card" style={{ borderLeft: '3px solid var(--accent-purple)', background: 'rgba(99, 102, 241, 0.03)' }}>
+              <div className="glass-card" style={{ borderLeft: '3px solid var(--accent-purple)', background: 'rgba(30, 58, 138, 0.02)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <h3 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Optimization suggests</h3>
                   <button className="btn-primary" style={{ padding: '4px 8px', fontSize: '0.72rem', borderRadius: '6px' }}
@@ -1632,8 +2361,8 @@ export default function App() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     {optimizedDebts.map((debt, index) => {
-                      const debtor = homemates.find(h => h.id === debt.debtorId)?.name || 'Someone';
-                      const creditor = homemates.find(h => h.id === debt.creditorId)?.name || 'Someone';
+                      const debtor = kompaMembers.find(h => h.id === debt.debtorId)?.name || 'Someone';
+                      const creditor = kompaMembers.find(h => h.id === debt.creditorId)?.name || 'Someone';
                       return (
                         <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 500, color: '#1e293b' }}>
                           <span>{debtor} to {creditor}</span>
@@ -1661,7 +2390,7 @@ export default function App() {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>{exp.title}</div>
                         <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px' }}>
-                          Paid by {homemates.find(h => h.id === exp.payerId)?.name} on {exp.date}
+                          Paid by {kompaMembers.find(h => h.id === exp.payerId)?.name} on {exp.date}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
@@ -1692,8 +2421,8 @@ export default function App() {
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {optimizedDebts.map((debt, index) => {
-                          const debtor = homemates.find(h => h.id === debt.debtorId);
-                          const creditor = homemates.find(h => h.id === debt.creditorId);
+                          const debtor = kompaMembers.find(h => h.id === debt.debtorId);
+                          const creditor = kompaMembers.find(h => h.id === debt.creditorId);
                           return (
                             <div 
                               key={index} 
@@ -1832,7 +2561,7 @@ export default function App() {
                       <div>
                         <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Payer</label>
                         <select value={newExpPayer} onChange={e => setNewExpPayer(e.target.value)} style={{ marginTop: '4px' }}>
-                          {homemates.map(h => (
+                          {kompaMembers.map(h => (
                             <option key={h.id} value={h.id}>{h.name}</option>
                           ))}
                         </select>
@@ -1845,9 +2574,9 @@ export default function App() {
                         </select>
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Included Homemates</label>
+                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Included Roommates</label>
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                          {homemates.map(h => (
+                          {kompaMembers.map(h => (
                             <button
                               key={h.id}
                               style={{
@@ -1888,7 +2617,7 @@ export default function App() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '8px', marginBottom: '12px' }}>
                 <Users size={16} style={{ color: 'var(--accent-purple)' }} />
                 <div>
-                  <h2 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>Household Chatroom</h2>
+                  <h2 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>Kompa Chatroom</h2>
                   <span style={{ fontSize: '0.68rem', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
                     <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-emerald)' }}></span>
                     Double Ratchet Encryption Active
@@ -1899,9 +2628,9 @@ export default function App() {
               {/* Chat messages */}
               <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingRight: '4px' }}>
                 {chatMessages.map(msg => {
-                  const isMe = msg.senderId === currentUser.id;
+                  const isMe = msg.senderId === currentUserProfile.id;
                   const isSystem = msg.senderId === 'system';
-                  const sender = homemates.find(h => h.id === msg.senderId);
+                  const sender = kompaMembers.find(h => h.id === msg.senderId);
                   
                   if (isSystem) {
                     return (
@@ -1924,15 +2653,15 @@ export default function App() {
                         <div style={{ 
                           fontSize: '0.68rem', 
                           fontWeight: 700, 
-                          color: sender?.color || '#000000',
+                          color: sender?.color || '#1e3a8a',
                           marginBottom: '2px'
                         }}>
-                          {sender?.name}
+                          {sender?.name || 'Roommate'}
                         </div>
                       )}
                       <div>{msg.text}</div>
                       <span style={{ 
-                        fontSize: '0.6.2rem', 
+                        fontSize: '0.62rem', 
                         color: isMe ? 'rgba(255,255,255,0.6)' : '#94a3b8', 
                         display: 'block', 
                         textAlign: 'right',

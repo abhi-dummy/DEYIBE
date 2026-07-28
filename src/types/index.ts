@@ -5,6 +5,13 @@ export interface Homemate {
   color: string;
 }
 
+export interface Kompa {
+  id: string;
+  name: string;
+  inviteCode: string;
+  ownerId: string;
+}
+
 export interface Expense {
   id: string;
   title: string;
@@ -60,6 +67,7 @@ export interface Task {
   dueDate: string;
   completed: boolean;
   frequency: 'once' | 'daily' | 'weekly' | 'monthly';
+  choreType?: 'general' | 'trash' | 'kitchen';
 }
 
 export interface PulseAlert {
