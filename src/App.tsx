@@ -104,6 +104,20 @@ export default function App() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Helper for safe optimistic writes to Supabase
+  const safeDbWrite = async (operation: () => any) => {
+    try {
+      const result = await operation();
+      if (result && result.error) {
+        console.warn('Supabase write completed with constraint warnings:', result.error.message);
+      }
+      return result;
+    } catch (err) {
+      console.warn('Supabase request failed in background (continuing offline local-first state):', err);
+      return null;
+    }
+  };
+
   // 1. Check Supabase connection and load tables on mount
   useEffect(() => {
     const handleGlobalClick = (e: MouseEvent) => {
@@ -214,7 +228,7 @@ export default function App() {
   const loadFromSupabase = async () => {
     // Load shelf
     const { data: shelf } = await supabase.from('shelf_items').select('*').order('created_at', { ascending: false });
-    if (shelf) {
+    if (shelf && shelf.length > 0) {
       setShelfItems(shelf.map(s => ({
         id: s.id,
         name: s.name,
@@ -228,7 +242,7 @@ export default function App() {
 
     // Load chat
     const { data: chat } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true });
-    if (chat) {
+    if (chat && chat.length > 0) {
       setChatMessages(chat.map(m => ({
         id: m.id,
         senderId: m.sender_id,
@@ -239,7 +253,7 @@ export default function App() {
 
     // Load expenses
     const { data: exp } = await supabase.from('expenses').select('*').order('date', { ascending: false });
-    if (exp) {
+    if (exp && exp.length > 0) {
       setExpenses(exp.map(e => ({
         id: e.id,
         title: e.title,
@@ -254,7 +268,7 @@ export default function App() {
 
     // Load tasks
     const { data: tsk } = await supabase.from('tasks').select('*');
-    if (tsk) {
+    if (tsk && tsk.length > 0) {
       setTasks(tsk.map(t => ({
         id: t.id,
         title: t.title,
@@ -287,12 +301,12 @@ export default function App() {
   // Add alert to Pulse panel
   const addPulse = async (title: string, message: string, type: PulseAlert['type']) => {
     if (dbSynced) {
-      await supabase.from('pulse_alerts').insert({
+      safeDbWrite(() => supabase.from('pulse_alerts').insert({
         title,
         message,
         type,
         read: false
-      });
+      }));
     }
 
     const newAlert: PulseAlert = {
@@ -310,13 +324,6 @@ export default function App() {
   const handleSendMessage = async () => {
     if (!chatInput.trim()) return;
 
-    if (dbSynced) {
-      await supabase.from('chat_messages').insert({
-        sender_id: currentUser.id,
-        text: chatInput
-      });
-    }
-
     const newMessage: ChatMessage = {
       id: `m_${Date.now()}`,
       senderId: currentUser.id,
@@ -326,13 +333,20 @@ export default function App() {
     setChatMessages(prev => [...prev, newMessage]);
     setChatInput('');
 
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('chat_messages').insert({
+        sender_id: currentUser.id,
+        text: chatInput
+      }));
+    }
+
     // Simulate reply
     setTimeout(async () => {
       if (dbSynced) {
-        await supabase.from('chat_messages').insert({
+        safeDbWrite(() => supabase.from('chat_messages').insert({
           sender_id: '2', // Sandeep
           text: 'Agreed. Let me check and settle my balance.'
-        });
+        }));
       }
 
       const responseMessage: ChatMessage = {
@@ -351,16 +365,6 @@ export default function App() {
     const debtor = homemates.find(h => h.id === debtorId)?.name || 'Someone';
     const creditor = homemates.find(h => h.id === creditorId)?.name || 'Someone';
 
-    if (dbSynced) {
-      await supabase.from('expenses').insert({
-        title: `Settled balance: ${debtor} to ${creditor}`,
-        amount: amount,
-        payer_id: debtorId,
-        split_method: 'custom',
-        shares: { [creditorId]: amount }
-      });
-    }
-
     const settleExpense: Expense = {
       id: `e_${Date.now()}`,
       title: `Settled balance: ${debtor} to ${creditor}`,
@@ -374,6 +378,16 @@ export default function App() {
 
     setExpenses(prev => [...prev, settleExpense]);
     setShowSettleModal(false);
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('expenses').insert({
+        title: `Settled balance: ${debtor} to ${creditor}`,
+        amount: amount,
+        payer_id: debtorId,
+        split_method: 'custom',
+        shares: { [creditorId]: amount }
+      }));
+    }
 
     // Confetti effect
     confetti({
@@ -404,16 +418,6 @@ export default function App() {
   const handleAddShelfItem = async () => {
     if (!newShelfName.trim()) return;
 
-    if (dbSynced) {
-      await supabase.from('shelf_items').insert({
-        name: newShelfName,
-        status: 'low',
-        priority: newShelfPriority,
-        added_by: currentUser.id,
-        visibility: newShelfVisibility
-      });
-    }
-
     const newItem: ShelfItem = {
       id: `s_${Date.now()}`,
       name: newShelfName,
@@ -426,6 +430,17 @@ export default function App() {
     setShelfItems(prev => [newItem, ...prev]);
     setNewShelfName('');
     setShowAddShelfModal(false);
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('shelf_items').insert({
+        name: newShelfName,
+        status: 'low',
+        priority: newShelfPriority,
+        added_by: currentUser.id,
+        visibility: newShelfVisibility
+      }));
+    }
+
     logFlow(`Abhi added ${newShelfName} to Shelf requirements`, 'stocked');
     addPulse('Inventory Update', `Abhi requested restocking of "${newShelfName}".`, 'info');
   };
@@ -435,12 +450,6 @@ export default function App() {
     const isCurrentlyStocked = item.status === 'stocked';
     const newStatus = isCurrentlyStocked ? 'low' : 'stocked';
     
-    if (dbSynced) {
-      await supabase.from('shelf_items').update({
-        status: newStatus
-      }).eq('id', item.id);
-    }
-
     setShelfItems(prev => prev.map(i => {
       if (i.id === item.id) {
         return { 
@@ -451,6 +460,12 @@ export default function App() {
       }
       return i;
     }));
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('shelf_items').update({
+        status: newStatus
+      }).eq('id', item.id));
+    }
 
     if (newStatus === 'stocked') {
       logFlow(`Abhi restocked item "${item.name}"`, 'stocked');
@@ -526,12 +541,12 @@ export default function App() {
     // Save to Supabase Shelf
     if (dbSynced) {
       for (const r of foundRequests) {
-        await supabase.from('shelf_items').insert({
+        safeDbWrite(() => supabase.from('shelf_items').insert({
           name: r.status === 'replaced' ? (r.replacementName || r.itemName) : r.itemName,
           status: 'stocked',
           priority: 'medium',
           added_by: r.requesterId
-        });
+        }));
       }
     }
 
@@ -557,13 +572,13 @@ export default function App() {
       });
 
       if (dbSynced) {
-        await supabase.from('expenses').insert({
+        safeDbWrite(() => supabase.from('expenses').insert({
           title: `Shopping Run: ${activeRun.store}`,
           amount: Number(totalAmount.toFixed(2)),
           payer_id: activeRun.shopperId,
           split_method: 'equal',
           shares
-        });
+        }));
       }
 
       const newExpense: Expense = {
@@ -577,7 +592,7 @@ export default function App() {
         visibility: ['1', '2', '3', '4']
       };
 
-      setExpenses(prev => [...prev, newExpense]);
+      setExpenses(prev => [newExpense, ...prev]);
       logFlow(`Completed ${activeRun.store} Run. Split cost of $${totalAmount.toFixed(2)}`, 'split');
       addPulse('Run Complete', `Run to ${activeRun.store} finished. Total cost split: $${totalAmount.toFixed(2)}.`, 'success');
     }
@@ -635,8 +650,6 @@ export default function App() {
 
     try {
       const worker = await createWorker('eng');
-      
-      // Update loader details
       setOcrProgress('Running OCR text extraction...');
       const { data } = await worker.recognize(file);
       await worker.terminate();
@@ -644,7 +657,6 @@ export default function App() {
       const text = data.text;
       console.log('Extracted Raw Text:', text);
 
-      // Simple regex parser to find line items & prices
       const lines = text.split('\n');
       const detectedItems: Array<{ name: string; price: number }> = [];
       let totalValue = 0;
@@ -660,7 +672,6 @@ export default function App() {
         }
       });
 
-      // Find Total
       const totalMatch = text.match(/(?:TOTAL|NET|DUE)\s*\$?(\d+[\.,]\d{2})/i);
       if (totalMatch) {
         totalValue = parseFloat(totalMatch[1].replace(',', '.'));
@@ -669,7 +680,6 @@ export default function App() {
       }
 
       if (detectedItems.length === 0) {
-        // Fallback dummy items if OCR fails to read values clearly
         detectedItems.push({ name: 'Receipt Item #1', price: 12.50 });
         detectedItems.push({ name: 'Receipt Item #2', price: 8.90 });
         totalValue = 21.40;
@@ -685,7 +695,6 @@ export default function App() {
 
     } catch (err) {
       console.error('OCR processing failed', err);
-      // Fallback
       triggerOCRScan('Costco');
     } finally {
       setOcrScanning(false);
@@ -703,16 +712,6 @@ export default function App() {
       shares[m.id] = Number(share.toFixed(2));
     });
 
-    if (dbSynced) {
-      await supabase.from('expenses').insert({
-        title: `OCR Scan: ${ocrResult.merchant}`,
-        amount: ocrResult.total,
-        payer_id: currentUser.id,
-        split_method: 'equal',
-        shares
-      });
-    }
-
     const newExpense: Expense = {
       id: `e_${Date.now()}`,
       title: `OCR Scan: ${ocrResult.merchant}`,
@@ -724,15 +723,28 @@ export default function App() {
       visibility: ['1', '2', '3', '4']
     };
 
-    setExpenses(prev => [...prev, newExpense]);
+    setExpenses(prev => [newExpense, ...prev]);
     setShowOCRModal(false);
     setOcrResult(null);
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('expenses').insert({
+        title: `OCR Scan: ${ocrResult.merchant}`,
+        amount: ocrResult.total,
+        payer_id: currentUser.id,
+        split_method: 'equal',
+        shares
+      }));
+    }
 
     // Auto-restock matching Shelf items
     const itemNamesLower = ocrResult.items.map((i: any) => i.name.toLowerCase());
     setShelfItems(prev => prev.map(s => {
       const match = itemNamesLower.some((name: string) => name.includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(name));
       if (match) {
+        if (dbSynced) {
+          safeDbWrite(() => supabase.from('shelf_items').update({ status: 'stocked' }).eq('id', s.id));
+        }
         return { ...s, status: 'stocked', restockedAt: new Date().toISOString() };
       }
       return s;
@@ -758,16 +770,6 @@ export default function App() {
       shares[id] = Number(share.toFixed(2));
     });
 
-    if (dbSynced) {
-      await supabase.from('expenses').insert({
-        title: newExpTitle,
-        amount: amt,
-        payer_id: newExpPayer,
-        split_method: newExpSplit,
-        shares
-      });
-    }
-
     const newExpense: Expense = {
       id: `e_${Date.now()}`,
       title: newExpTitle,
@@ -779,10 +781,21 @@ export default function App() {
       visibility: newExpVisibility
     };
 
-    setExpenses(prev => [...prev, newExpense]);
+    setExpenses(prev => [newExpense, ...prev]);
     setShowAddExpenseModal(false);
     setNewExpTitle('');
     setNewExpAmount('');
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('expenses').insert({
+        title: newExpTitle,
+        amount: amt,
+        payer_id: newExpPayer,
+        split_method: newExpSplit,
+        shares
+      }));
+    }
+
     logFlow(`Abhi logged manual transaction "${newExpTitle}" ($${amt.toFixed(2)})`, 'split');
   };
 
@@ -790,18 +803,18 @@ export default function App() {
   const handleToggleTask = async (task: Task) => {
     const nextCompletedVal = !task.completed;
 
-    if (dbSynced) {
-      await supabase.from('tasks').update({
-        completed: nextCompletedVal
-      }).eq('id', task.id);
-    }
-
     setTasks(prev => prev.map(t => {
       if (t.id === task.id) {
         return { ...t, completed: nextCompletedVal };
       }
       return t;
     }));
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('tasks').update({
+        completed: nextCompletedVal
+      }).eq('id', task.id));
+    }
 
     if (nextCompletedVal) {
       logFlow(`Marked chore as complete: "${task.title}"`, 'chore');
@@ -818,12 +831,13 @@ export default function App() {
   const handleDeleteShelfItem = async (id: string) => {
     const item = shelfItems.find(i => i.id === id);
 
-    if (dbSynced) {
-      await supabase.from('shelf_items').delete().eq('id', id);
-    }
-
     setShelfItems(prev => prev.filter(i => i.id !== id));
     setShowShelfDetailsModal(null);
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('shelf_items').delete().eq('id', id));
+    }
+
     if (item) {
       logFlow(`Removed item "${item.name}" from inventory catalog`, 'alert');
     }
@@ -1816,7 +1830,7 @@ export default function App() {
                       )}
                       <div>{msg.text}</div>
                       <span style={{ 
-                        fontSize: '0.6rem', 
+                        fontSize: '0.6.2rem', 
                         color: isMe ? 'rgba(255,255,255,0.6)' : '#94a3b8', 
                         display: 'block', 
                         textAlign: 'right',
