@@ -42,10 +42,11 @@ interface FlowLog {
 export default function App() {
   // Authentication & Session States
   const [session, setSession] = useState<any | null>(null);
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'signup' | 'forgot_password' | 'verify_otp'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authName, setAuthName] = useState('');
+  const [authOtpCode, setAuthOtpCode] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [currentUserProfile, setCurrentUserProfile] = useState<Homemate | null>(null);
 
@@ -427,14 +428,14 @@ export default function App() {
     };
   }, [dbSynced, activeKompa, currentUserProfile]);
 
-  // Auth Operations
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!authEmail || !authPassword) return;
+    if (!authEmail) return;
     
     setAuthLoading(true);
     try {
       if (authMode === 'signup') {
+        if (!authPassword) throw new Error('Password is required');
         const { data, error } = await supabase.auth.signUp({
           email: authEmail,
           password: authPassword
@@ -456,7 +457,8 @@ export default function App() {
           setAuthPassword('');
           setAuthName('');
         }
-      } else {
+      } else if (authMode === 'login') {
+        if (!authPassword) throw new Error('Password is required');
         const { error } = await supabase.auth.signInWithPassword({
           email: authEmail,
           password: authPassword
@@ -464,6 +466,28 @@ export default function App() {
         if (error) throw error;
         setAuthEmail('');
         setAuthPassword('');
+      } else if (authMode === 'forgot_password') {
+        const { error } = await supabase.auth.signInWithOtp({
+          email: authEmail,
+          options: {
+            shouldCreateUser: false // only registered users can request OTP
+          }
+        });
+        if (error) throw error;
+        alert('One-time password (OTP) code sent to your email!');
+        setAuthMode('verify_otp');
+      } else if (authMode === 'verify_otp') {
+        if (!authOtpCode) throw new Error('One-time password (OTP) code is required');
+        const { error } = await supabase.auth.verifyOtp({
+          email: authEmail,
+          token: authOtpCode,
+          type: 'email'
+        });
+        if (error) throw error;
+        
+        // Success (user logged in via OTP!)
+        setAuthOtpCode('');
+        setAuthMode('login');
       }
     } catch (err: any) {
       alert(err.message || 'Authentication error occurred.');
@@ -471,6 +495,7 @@ export default function App() {
       setAuthLoading(false);
     }
   };
+
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -1271,149 +1296,206 @@ export default function App() {
   // AUTHENTICATION SCREEN VIEW
   if (!session || !currentUserProfile) {
     return (
-      <div className="bg-blobs" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <div className="blob blob-1"></div>
-        <div className="blob blob-2"></div>
-        <div className="blob blob-3"></div>
+      <>
+        <div className="bg-blobs">
+          <div className="blob blob-1"></div>
+          <div className="blob blob-2"></div>
+          <div className="blob blob-3"></div>
+        </div>
 
-        <div className="glass-card" style={{ width: '90%', maxWidth: '380px', padding: '28px', border: '1px solid rgba(30, 58, 138, 0.08)' }}>
-          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-            <h2 className="brand-title" style={{ justifyContent: 'center', fontSize: '1.8rem' }}>
-              <Sparkles size={26} style={{ color: '#2563eb' }} />
-              Deyibe
-            </h2>
-            <p style={{ fontSize: '0.78rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700, marginTop: '2px' }}>
-              Kompa Operating System
-            </p>
-          </div>
-
-          <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {authMode === 'signup' && (
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Your Nickname</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Abhi" 
-                  value={authName} 
-                  onChange={e => setAuthName(e.target.value)} 
-                  required 
-                  style={{ marginTop: '4px' }}
-                />
-              </div>
-            )}
-            <div>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Email Address</label>
-              <input 
-                type="email" 
-                placeholder="you@email.com" 
-                value={authEmail} 
-                onChange={e => setAuthEmail(e.target.value)} 
-                required 
-                style={{ marginTop: '4px' }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Password</label>
-              <input 
-                type="password" 
-                placeholder="••••••••" 
-                value={authPassword} 
-                onChange={e => setAuthPassword(e.target.value)} 
-                required 
-                style={{ marginTop: '4px' }}
-              />
+        <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+          <div className="glass-card" style={{ width: '100%', padding: '28px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.08)' }}>
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <h2 className="brand-title" style={{ justifyContent: 'center', fontSize: '1.8rem' }}>
+                <Sparkles size={26} style={{ color: '#2563eb' }} />
+                Deyibe
+              </h2>
+              <p style={{ fontSize: '0.78rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700, marginTop: '2px' }}>
+                Kompa Operating System
+              </p>
             </div>
 
-            <button type="submit" className="btn-primary" style={{ width: '100%', padding: '12px', marginTop: '8px' }} disabled={authLoading}>
-              {authLoading ? <RefreshCw size={16} className="animate-spin" style={{ margin: '0 auto' }} /> : authMode === 'login' ? 'Sign In' : 'Create Account'}
-            </button>
-          </form>
+            <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {authMode === 'signup' && (
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Your Nickname</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Abhi" 
+                    value={authName} 
+                    onChange={e => setAuthName(e.target.value)} 
+                    required 
+                    style={{ marginTop: '4px' }}
+                  />
+                </div>
+              )}
+              
+              {authMode !== 'verify_otp' && (
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Email Address</label>
+                  <input 
+                    type="email" 
+                    placeholder="you@email.com" 
+                    value={authEmail} 
+                    onChange={e => setAuthEmail(e.target.value)} 
+                    required 
+                    style={{ marginTop: '4px' }}
+                  />
+                </div>
+              )}
 
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px', fontSize: '0.8rem' }}>
-            <span style={{ color: '#64748b' }}>
-              {authMode === 'login' ? "Don't have an account?" : "Already have an account?"}
-              <button 
-                onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
-                style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, marginLeft: '4px', cursor: 'pointer' }}
-              >
-                {authMode === 'login' ? 'Sign Up' : 'Sign In'}
+              {(authMode === 'login' || authMode === 'signup') && (
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Password</label>
+                  <input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    value={authPassword} 
+                    onChange={e => setAuthPassword(e.target.value)} 
+                    required 
+                    style={{ marginTop: '4px' }}
+                  />
+                </div>
+              )}
+
+              {authMode === 'verify_otp' && (
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Enter One-Time Passcode (OTP)</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. 123456" 
+                    value={authOtpCode} 
+                    onChange={e => setAuthOtpCode(e.target.value)} 
+                    required 
+                    maxLength={6}
+                    style={{ marginTop: '4px' }}
+                  />
+                </div>
+              )}
+
+              <button type="submit" className="btn-primary" style={{ width: '100%', padding: '12px', marginTop: '8px' }} disabled={authLoading}>
+                {authLoading ? (
+                  <RefreshCw size={16} className="animate-spin" style={{ margin: '0 auto' }} />
+                ) : authMode === 'login' ? (
+                  'Sign In'
+                ) : authMode === 'signup' ? (
+                  'Create Account'
+                ) : authMode === 'forgot_password' ? (
+                  'Send One-Time Passcode'
+                ) : (
+                  'Verify & Log In'
+                )}
               </button>
-            </span>
+            </form>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', marginTop: '16px', fontSize: '0.8rem' }}>
+              {authMode === 'login' && (
+                <button 
+                  onClick={() => setAuthMode('forgot_password')}
+                  style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Forgot password?
+                </button>
+              )}
+
+              {(authMode === 'forgot_password' || authMode === 'verify_otp') && (
+                <button 
+                  onClick={() => setAuthMode('login')}
+                  style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Back to Sign In
+                </button>
+              )}
+
+              <span style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '4px' }}>
+                {authMode === 'signup' ? 'Already have an account?' : "Don't have an account?"}
+                <button 
+                  onClick={() => setAuthMode(authMode === 'signup' ? 'login' : 'signup')}
+                  style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, marginLeft: '4px', cursor: 'pointer' }}
+                >
+                  {authMode === 'signup' ? 'Sign In' : 'Sign Up'}
+                </button>
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   // NO KOMPA JOINED SCREEN VIEW
   if (joinedKompas.length === 0) {
     return (
-      <div className="bg-blobs" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <div className="blob blob-1"></div>
-        <div className="blob blob-2"></div>
-        <div className="blob blob-3"></div>
+      <>
+        <div className="bg-blobs">
+          <div className="blob blob-1"></div>
+          <div className="blob blob-2"></div>
+          <div className="blob blob-3"></div>
+        </div>
 
-        <div className="glass-card" style={{ width: '90%', maxWidth: '380px', padding: '26px', border: '1px solid rgba(30, 58, 138, 0.08)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-            <div>
-              <h3 style={{ fontSize: '1rem', color: '#475569' }}>Hello, {currentUserProfile.name}!</h3>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginTop: '2px', color: '#0f172a' }}>
-                Ready to Join a <span className="kompa-highlight">Kompa</span>
-              </h2>
-            </div>
-            <button onClick={handleSignOut} style={{ padding: '6px', borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center' }}>
-              <LogOut size={16} style={{ color: '#475569' }} />
-            </button>
-          </div>
-
-          <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5, marginBottom: '22px' }}>
-            A <i>Kompa</i> is a shared house space. Create a new one or join an existing one using an invite code to coordinate chores and expenses with roommates!
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div className="glass-card" style={{ padding: '12px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.04)' }}>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>Create new Kompa</h4>
-              <input 
-                type="text" 
-                placeholder="e.g. Abhi's Suite" 
-                value={kompaNameInput} 
-                onChange={e => setKompaNameInput(e.target.value)} 
-                style={{ padding: '8px' }}
-              />
-              <button 
-                className="btn-primary" 
-                style={{ width: '100%', padding: '8px', fontSize: '0.78rem', marginTop: '8px' }} 
-                onClick={handleCreateKompa}
-                disabled={dbLoading}
-              >
-                {dbLoading ? 'Creating...' : 'Create Kompa'}
+        <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+          <div className="glass-card" style={{ width: '100%', padding: '26px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.08)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ fontSize: '1rem', color: '#475569' }}>Hello, {currentUserProfile.name}!</h3>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginTop: '2px', color: '#0f172a' }}>
+                  Ready to Join a <span className="kompa-highlight">Kompa</span>
+                </h2>
+              </div>
+              <button onClick={handleSignOut} style={{ padding: '6px', borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center' }}>
+                <LogOut size={16} style={{ color: '#475569' }} />
               </button>
             </div>
 
-            <div style={{ textAlign: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', margin: '4px 0' }}>OR</div>
+            <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5, marginBottom: '22px' }}>
+              A <i>Kompa</i> is a shared house space. Create a new one or join an existing one using an invite code to coordinate chores and expenses with roommates!
+            </p>
 
-            <div className="glass-card" style={{ padding: '12px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.04)' }}>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>Join existing Kompa</h4>
-              <input 
-                type="text" 
-                placeholder="Enter 6-digit invite code" 
-                value={kompaCodeInput} 
-                onChange={e => setKompaCodeInput(e.target.value)} 
-                maxLength={6}
-                style={{ padding: '8px' }}
-              />
-              <button 
-                className="btn-secondary" 
-                style={{ width: '100%', padding: '8px', fontSize: '0.78rem', marginTop: '8px' }} 
-                onClick={handleJoinKompa}
-                disabled={dbLoading}
-              >
-                {dbLoading ? 'Joining...' : 'Join with Code'}
-              </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="glass-card" style={{ padding: '12px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.04)' }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>Create new Kompa</h4>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Abhi's Suite" 
+                  value={kompaNameInput} 
+                  onChange={e => setKompaNameInput(e.target.value)} 
+                  style={{ padding: '8px' }}
+                />
+                <button 
+                  className="btn-primary" 
+                  style={{ width: '100%', padding: '8px', fontSize: '0.78rem', marginTop: '8px' }} 
+                  onClick={handleCreateKompa}
+                  disabled={dbLoading}
+                >
+                  {dbLoading ? 'Creating...' : 'Create Kompa'}
+                </button>
+              </div>
+
+              <div style={{ textAlign: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', margin: '4px 0' }}>OR</div>
+
+              <div className="glass-card" style={{ padding: '12px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.04)' }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>Join existing Kompa</h4>
+                <input 
+                  type="text" 
+                  placeholder="Enter 6-digit invite code" 
+                  value={kompaCodeInput} 
+                  onChange={e => setKompaCodeInput(e.target.value)} 
+                  maxLength={6}
+                  style={{ padding: '8px' }}
+                />
+                <button 
+                  className="btn-secondary" 
+                  style={{ width: '100%', padding: '8px', fontSize: '0.78rem', marginTop: '8px' }} 
+                  onClick={handleJoinKompa}
+                  disabled={dbLoading}
+                >
+                  {dbLoading ? 'Joining...' : 'Join with Code'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
