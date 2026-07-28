@@ -1389,67 +1389,67 @@ export default function App() {
         width: `${size}px`,
         height: `${size}px`,
         borderRadius: '50%',
-        background: `${member.color}15`,
-        color: member.color,
+        background: '#1917150a',
+        color: '#191715',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: size > 40 ? '0.9rem' : '0.8rem',
         fontWeight: 700,
-        border: `1.5px solid ${member.color}25`,
-        boxShadow: `0 2px 8px ${member.color}0a`
+        border: `1.5px solid rgba(25, 23, 21, 0.15)`,
+        boxShadow: 'none'
       }}>
         {member.avatar}
       </div>
     );
   };
 
-  // Render customized vector icons for House Flow
+  // Render initials timeline logger
   const renderFlowIcon = (type: FlowLog['type']) => {
     switch (type) {
       case 'alert':
         return <AlertCircle size={14} style={{ color: 'var(--accent-rose)' }} />;
       case 'run':
-        return <ShoppingCart size={14} style={{ color: 'var(--accent-blue)' }} />;
+        return <ShoppingCart size={14} style={{ color: '#191715' }} />;
       case 'chore':
-        return <CheckSquare size={14} style={{ color: 'var(--accent-emerald)' }} />;
+        return <CheckSquare size={14} style={{ color: '#191715' }} />;
       case 'split':
-        return <DollarSign size={14} style={{ color: 'var(--accent-amber)' }} />;
+        return <DollarSign size={14} style={{ color: '#191715' }} />;
       case 'stocked':
-        return <Check size={14} style={{ color: 'var(--accent-emerald)' }} />;
+        return <Check size={14} style={{ color: '#191715' }} />;
       default:
-        return <Info size={14} style={{ color: 'var(--accent-purple)' }} />;
+        return <Info size={14} style={{ color: '#191715' }} />;
     }
   };
 
-  // Render realistic Airbnb-style vector logo for runs
+  // Render realistic vector logo for runs
   const renderRetailerLogo = (storeName: string) => {
     const isCostco = storeName.toLowerCase().includes('costco');
     const isWalmart = storeName.toLowerCase().includes('walmart');
 
     if (isCostco) {
       return (
-        <svg width="46" height="46" viewBox="0 0 100 100" style={{ borderRadius: '8px' }}>
-          <rect width="100" height="100" fill="#005ea6" />
-          <text x="50%" y="45%" dominantBaseline="middle" textAnchor="middle" fill="#e31b23" fontSize="22" fontWeight="900" fontFamily="Impact, sans-serif">COSTCO</text>
-          <text x="50%" y="75%" dominantBaseline="middle" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold" letterSpacing="1">WHOLESALE</text>
+        <svg width="46" height="46" viewBox="0 0 100 100" style={{ borderRadius: '6px' }}>
+          <rect width="100" height="100" fill="#fcfbf9" stroke="rgba(25, 23, 21, 0.15)" strokeWidth="1" />
+          <text x="50%" y="45%" dominantBaseline="middle" textAnchor="middle" fill="#e31b23" fontSize="22" fontWeight="900" fontFamily="var(--font-serif)">Costco</text>
+          <text x="50%" y="75%" dominantBaseline="middle" textAnchor="middle" fill="#005ea6" fontSize="9" fontWeight="bold" letterSpacing="0.5">WHOLESALE</text>
         </svg>
       );
     } else if (isWalmart) {
       return (
-        <svg width="46" height="46" viewBox="0 0 100 100" style={{ borderRadius: '8px' }}>
-          <rect width="100" height="100" fill="#0071ce" />
+        <svg width="46" height="46" viewBox="0 0 100 100" style={{ borderRadius: '6px' }}>
+          <rect width="100" height="100" fill="#fcfbf9" stroke="rgba(25, 23, 21, 0.15)" strokeWidth="1" />
           <circle cx="50" cy="50" r="14" fill="none" />
-          {/* Spark sunburst */}
           <path d="M 50,15 L 50,28 M 50,72 L 50,85 M 15,50 L 28,50 M 72,50 L 85,50 M 25,25 L 34,34 M 66,66 L 75,75 M 75,25 L 66,34 M 34,66 L 25,75" stroke="#ffc220" strokeWidth="6" strokeLinecap="round" />
         </svg>
       );
     } else {
       return (
         <div style={{
-          width: '46px', height: '46px', borderRadius: '8px', 
-          background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white'
+          width: '46px', height: '46px', borderRadius: '6px', 
+          background: '#ffffff',
+          border: '1px solid rgba(25, 23, 21, 0.15)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#191715'
         }}>
           <ShoppingBag size={22} />
         </div>
@@ -1462,382 +1462,457 @@ export default function App() {
     switch (category) {
       case 'vacuum':
         return (
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(30, 58, 138, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1e3a8a' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#191715' }}>
             <Flame size={22} />
           </div>
         );
       case 'coffee':
         return (
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(180, 83, 9, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#b45309' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#191715' }}>
             <Coffee size={22} />
           </div>
         );
       case 'speaker':
         return (
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(4, 120, 87, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#047857' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#191715' }}>
             <Volume2 size={22} />
           </div>
         );
       default:
         return (
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(37, 99, 235, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#191715' }}>
             <Layers size={22} />
           </div>
         );
     }
   };
 
-  // SAAS STYLE LANDING PAGE VIEW
+  // PHIA STYLE LANDING PAGE VIEW
   if (viewLanding && (!session || !currentUserProfile)) {
     return (
-      <>
-        <div className="bg-blobs">
-          <div className="blob blob-1"></div>
-          <div className="blob blob-2"></div>
-          <div className="blob blob-3"></div>
-        </div>
+      <div className="app-container" style={{ background: '#fbfbfa', overflowY: 'hidden' }}>
+        
+        {/* Phia-style Minimalist Header */}
+        <header className="app-header" style={{ background: 'transparent', borderBottom: 'none', padding: '24px 20px' }}>
+          <div style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontSize: '1.5rem', fontWeight: 700, color: '#191715', cursor: 'pointer' }} onClick={() => setViewLanding(true)}>
+            deyibe
+          </div>
+          <div style={{ display: 'flex', gap: '14px', fontSize: '0.72rem', color: '#8c857e', fontWeight: 600 }}>
+            <span>Brands</span>
+            <span>Editorials</span>
+          </div>
+          <button 
+            className="btn-primary" 
+            style={{ padding: '6px 14px', fontSize: '0.75rem', borderRadius: '20px' }}
+            onClick={() => {
+              setViewLanding(false);
+              setAuthMode('login');
+            }}
+          >
+            Log In
+          </button>
+        </header>
 
-        <div className="app-container" style={{ overflowY: 'hidden' }}>
+        <div className="app-content landing-container">
           
-          <header className="app-header" style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
-            <div className="brand-title" style={{ gap: '6px' }}>
-              <Layers size={18} style={{ color: '#2563eb' }} />
-              Deyibe
-            </div>
-            <button 
-              className="btn-primary" 
-              style={{ padding: '6px 14px', fontSize: '0.78rem' }}
-              onClick={() => {
-                setViewLanding(false);
-                setAuthMode('login');
-              }}
-            >
-              Log In
-            </button>
-          </header>
+          {/* Phia-style Typography Hero Section */}
+          <div style={{ textAlign: 'center', padding: '10px 0 20px 0' }}>
+            <h1 style={{ 
+              fontFamily: 'var(--font-serif)', 
+              fontSize: '2.5rem', 
+              fontWeight: 500, 
+              lineHeight: 1.1, 
+              color: '#191715', 
+              letterSpacing: '-0.03em' 
+            }}>
+              Save your <span style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>favorite</span> finds.
+            </h1>
+            
+            <h2 style={{ 
+              fontFamily: 'var(--font-serif)', 
+              fontSize: '2.4rem', 
+              fontWeight: 500, 
+              lineHeight: 1.1, 
+              color: '#191715', 
+              letterSpacing: '-0.03em',
+              marginTop: '4px'
+            }}>
+              Dabbulu <span style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>eyi</span> bhe!?
+            </h2>
 
-          <div className="app-content landing-container">
-            {/* Hero Section */}
-            <div style={{ textAlign: 'center', padding: '10px 0 20px 0' }}>
-              <div className="caption-badge">
-                <span>Introducing the slogan:</span>
-                <i>"Dabbulu Eyi Bhe!?"</i>
-              </div>
-
-              <h1 style={{ fontSize: '1.9rem', fontWeight: 800, lineHeight: 1.2, color: '#0f172a', letterSpacing: '-0.03em' }}>
-                Coordinating your room shouldn't feel like a chore.
-              </h1>
-              
-              <p style={{ fontSize: '0.88rem', color: '#475569', marginTop: '10px', lineHeight: 1.5, padding: '0 8px' }}>
-                The beautiful operating system for roommates. Sync grocery shopping, gamify chores with animations, scan bills, and settle balances in one place.
-              </p>
-
-              <button 
-                className="btn-primary" 
-                style={{ width: '80%', padding: '12px', marginTop: '16px', fontSize: '0.9rem' }}
-                onClick={() => {
-                  setViewLanding(false);
-                  setAuthMode('signup');
-                }}
-              >
-                Launch App Free
-              </button>
-            </div>
-
-            {/* Figma Style Slider Showcase */}
-            <div className="landing-card" style={{ marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '0.9rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', textAlign: 'center', marginBottom: '14px' }}>
-                See how Deyibe saves time
-              </h3>
-              
-              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginBottom: '16px' }}>
-                <button className={`persona-btn ${activePersona === 'shopper' ? 'active' : ''}`} onClick={() => setActivePersona('shopper')}>
-                  Shopping
-                </button>
-                <button className={`persona-btn ${activePersona === 'chore' ? 'active' : ''}`} onClick={() => setActivePersona('chore')}>
-                  Chores
-                </button>
-                <button className={`persona-btn ${activePersona === 'finance' ? 'active' : ''}`} onClick={() => setActivePersona('finance')}>
-                  Bills
-                </button>
-              </div>
-
-              {activePersona === 'shopper' && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', animation: 'fadeIn 0.25s' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(37, 99, 235, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
-                    <ShoppingCart size={22} />
-                  </div>
-                  <h4 style={{ fontWeight: 800, fontSize: '0.95rem' }}>Abhi saves 30 minutes in-store</h4>
-                  <p style={{ fontSize: '0.8rem', color: '#64748b', lineHeight: 1.4 }}>
-                    Abhi starts a Live Costco Run. Roommates receive a push alert instantly, allowing them to add items to the shopping list in real time while Abhi is in the aisles.
-                  </p>
-                </div>
-              )}
-
-              {activePersona === 'chore' && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', animation: 'fadeIn 0.25s' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(4, 120, 87, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#047857' }}>
-                    <CheckSquare size={22} />
-                  </div>
-                  <h4 style={{ fontWeight: 800, fontSize: '0.95rem' }}>Sandeep makes house chores fun</h4>
-                  <p style={{ fontSize: '0.8rem', color: '#64748b', lineHeight: 1.4 }}>
-                    Sandeep completes his garbage chores. Instead of typing in chat, checking it off displays a realistic SVG animation of garbage bags dropping into the container.
-                  </p>
-                </div>
-              )}
-
-              {activePersona === 'finance' && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', animation: 'fadeIn 0.25s' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(180, 83, 9, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#b45309' }}>
-                    <DollarSign size={22} />
-                  </div>
-                  <h4 style={{ fontWeight: 800, fontSize: '0.95rem' }}>Riya splits costs in 1 click</h4>
-                  <p style={{ fontSize: '0.8rem', color: '#64748b', lineHeight: 1.4 }}>
-                    Riya uploads a receipt photo. The built-in OCR scans the items, calculates tax, and suggests optimized splits without requiring manual calculators.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Feature Highlights Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="landing-card" style={{ padding: '14px', borderRadius: '14px' }}>
-                <h4 style={{ fontSize: '0.82rem', fontWeight: 800 }}>Realtime Sync</h4>
-                <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>WebSocket channels update chats and shelves live.</p>
-              </div>
-              <div className="landing-card" style={{ padding: '14px', borderRadius: '14px' }}>
-                <h4 style={{ fontSize: '0.82rem', fontWeight: 800 }}>Security First</h4>
-                <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>Supabase Row Level Security protects your private chats.</p>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-      </>
-    );
-  }
-
-  // STANDARD AUTHENTICATION MODAL VIEW
-  if (!session || !currentUserProfile) {
-    return (
-      <>
-        <div className="bg-blobs">
-          <div className="blob blob-1"></div>
-          <div className="blob blob-2"></div>
-          <div className="blob blob-3"></div>
-        </div>
-
-        <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
-          <div className="glass-card" style={{ width: '100%', padding: '28px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.08)' }}>
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <h2 className="brand-title" style={{ justifyContent: 'center', fontSize: '1.8rem' }}>
-                <Sparkles size={26} style={{ color: '#2563eb' }} />
-                Deyibe
-              </h2>
-              <p style={{ fontSize: '0.78rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700, marginTop: '2px' }}>
-                Kompa Operating System
-              </p>
-            </div>
-
-            <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {authMode === 'signup' && (
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Your Nickname</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Abhi" 
-                    value={authName} 
-                    onChange={e => setAuthName(e.target.value)} 
-                    required 
-                    style={{ marginTop: '4px' }}
-                  />
-                </div>
-              )}
-              
-              {authMode !== 'verify_otp' && (
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Email Address</label>
-                  <input 
-                    type="email" 
-                    placeholder="you@email.com" 
-                    value={authEmail} 
-                    onChange={e => setAuthEmail(e.target.value)} 
-                    required 
-                    style={{ marginTop: '4px' }}
-                  />
-                </div>
-              )}
-
-              {(authMode === 'login' || authMode === 'signup') && (
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Password</label>
-                  <input 
-                    type="password" 
-                    placeholder="••••••••" 
-                    value={authPassword} 
-                    onChange={e => setAuthPassword(e.target.value)} 
-                    required 
-                    style={{ marginTop: '4px' }}
-                  />
-                </div>
-              )}
-
-              {authMode === 'verify_otp' && (
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Enter One-Time Passcode (OTP)</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. 123456" 
-                    value={authOtpCode} 
-                    onChange={e => setAuthOtpCode(e.target.value)} 
-                    required 
-                    maxLength={6}
-                    style={{ marginTop: '4px' }}
-                  />
-                </div>
-              )}
-
-              <button type="submit" className="btn-primary" style={{ width: '100%', padding: '12px', marginTop: '8px' }} disabled={authLoading}>
-                {authLoading ? (
-                  <RefreshCw size={16} className="animate-spin" style={{ margin: '0 auto' }} />
-                ) : authMode === 'login' ? (
-                  'Sign In'
-                ) : authMode === 'signup' ? (
-                  'Create Account'
-                ) : authMode === 'forgot_password' ? (
-                  'Send One-Time Passcode'
-                ) : (
-                  'Verify & Log In'
-                )}
-              </button>
-            </form>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', marginTop: '16px', fontSize: '0.8rem' }}>
-              {authMode === 'login' && (
-                <button 
-                  onClick={() => setAuthMode('forgot_password')}
-                  style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Forgot password?
-                </button>
-              )}
-
-              {(authMode === 'forgot_password' || authMode === 'verify_otp') && (
-                <button 
-                  onClick={() => setAuthMode('login')}
-                  style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Back to Sign In
-                </button>
-              )}
-
-              <span style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '4px' }}>
-                {authMode === 'signup' ? 'Already have an account?' : "Don't have an account?"}
-                <button 
-                  onClick={() => setAuthMode(authMode === 'signup' ? 'login' : 'signup')}
-                  style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, marginLeft: '4px', cursor: 'pointer' }}
-                >
-                  {authMode === 'signup' ? 'Sign In' : 'Sign Up'}
-                </button>
-              </span>
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  // NO KOMPA JOINED SCREEN VIEW
-  if (joinedKompas.length === 0) {
-    return (
-      <>
-        <div className="bg-blobs">
-          <div className="blob blob-1"></div>
-          <div className="blob blob-2"></div>
-          <div className="blob blob-3"></div>
-        </div>
-
-        <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
-          <div className="glass-card" style={{ width: '100%', padding: '26px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.08)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-              <div>
-                <h3 style={{ fontSize: '1rem', color: '#475569' }}>Hello, {currentUserProfile.name}!</h3>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginTop: '2px', color: '#0f172a' }}>
-                  Ready to Join a <span className="kompa-highlight">Kompa</span>
-                </h2>
-              </div>
-              <button onClick={handleSignOut} style={{ padding: '6px', borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center' }}>
-                <LogOut size={16} style={{ color: '#475569' }} />
-              </button>
-            </div>
-
-            <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5, marginBottom: '22px' }}>
-              A <i>Kompa</i> is a shared house space. Create a new one or join an existing one using an invite code to coordinate chores and expenses with roommates!
+            <p style={{ fontSize: '0.82rem', color: '#8c857e', marginTop: '12px', lineHeight: 1.4, padding: '0 20px', fontWeight: 500 }}>
+              Organize your best finds in collections. Get alerted when your roommate finishes chores.
             </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div className="glass-card" style={{ padding: '12px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.04)' }}>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>Create new Kompa</h4>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Abhi's Suite" 
-                  value={kompaNameInput} 
-                  onChange={e => setKompaNameInput(e.target.value)} 
-                  style={{ padding: '8px' }}
-                />
-                <button 
-                  className="btn-primary" 
-                  style={{ width: '100%', padding: '8px', fontSize: '0.78rem', marginTop: '8px' }} 
-                  onClick={handleCreateKompa}
-                  disabled={dbLoading}
-                >
-                  {dbLoading ? 'Creating...' : 'Create Kompa'}
-                </button>
+            <button 
+              className="btn-primary" 
+              style={{ width: '85%', padding: '12px', marginTop: '18px', fontSize: '0.85rem', borderRadius: '24px' }}
+              onClick={() => {
+                setViewLanding(false);
+                setAuthMode('signup');
+              }}
+            >
+              Launch App Free
+            </button>
+          </div>
+
+          {/* Phia-style Tilted Polaroid Collage Card Grid */}
+          <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', padding: '20px 10px', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            
+            {/* Card 1 */}
+            <div className="phia-polaroid-card" style={{ transform: 'rotate(-3deg)', minWidth: '155px', flexShrink: 0 }}>
+              <div className="phia-collage-grid">
+                <div className="phia-collage-image">🛒</div>
+                <div className="phia-collage-image">🥚</div>
+                <div className="phia-collage-image">🥛</div>
+                <div className="phia-collage-image">🍎</div>
               </div>
+              <div className="phia-polaroid-title">Costco list 🍂</div>
+              <div className="phia-polaroid-count">44 items</div>
+            </div>
 
-              <div style={{ textAlign: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', margin: '4px 0' }}>OR</div>
+            {/* Card 2 */}
+            <div className="phia-polaroid-card" style={{ transform: 'rotate(1.5deg)', minWidth: '155px', flexShrink: 0 }}>
+              <div className="phia-collage-grid">
+                <div className="phia-collage-image">🧹</div>
+                <div className="phia-collage-image">🗑️</div>
+                <div className="phia-collage-image">🧼</div>
+                <div className="phia-collage-image">🍽️</div>
+              </div>
+              <div className="phia-polaroid-title">Weekly chores ❄️</div>
+              <div className="phia-polaroid-count">12 items</div>
+            </div>
 
-              <div className="glass-card" style={{ padding: '12px', margin: 0, border: '1px solid rgba(30, 58, 138, 0.04)' }}>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>Join existing Kompa</h4>
-                <input 
-                  type="text" 
-                  placeholder="Enter 6-digit invite code" 
-                  value={kompaCodeInput} 
-                  onChange={e => setKompaCodeInput(e.target.value)} 
-                  maxLength={6}
-                  style={{ padding: '8px' }}
-                />
-                <button 
-                  className="btn-secondary" 
-                  style={{ width: '100%', padding: '8px', fontSize: '0.78rem', marginTop: '8px' }} 
-                  onClick={handleJoinKompa}
-                  disabled={dbLoading}
-                >
-                  {dbLoading ? 'Joining...' : 'Join with Code'}
-                </button>
+            {/* Card 3 */}
+            <div className="phia-polaroid-card" style={{ transform: 'rotate(-2deg)', minWidth: '155px', flexShrink: 0 }}>
+              <div className="phia-collage-grid">
+                <div className="phia-collage-image">💸</div>
+                <div className="phia-collage-image">🌐</div>
+                <div className="phia-collage-image">⚡</div>
+                <div className="phia-collage-image">🍕</div>
+              </div>
+              <div className="phia-polaroid-title">Roomie expenses 🎄</div>
+              <div className="phia-polaroid-count">4 items</div>
+            </div>
+
+            {/* Card 4 */}
+            <div className="phia-polaroid-card" style={{ transform: 'rotate(2.5deg)', minWidth: '155px', flexShrink: 0 }}>
+              <div className="phia-collage-grid">
+                <div className="phia-collage-image">🔌</div>
+                <div className="phia-collage-image">☕</div>
+                <div className="phia-collage-image">🔋</div>
+                <div className="phia-collage-image">📻</div>
+              </div>
+              <div className="phia-polaroid-title">Kompa wishlist ✨</div>
+              <div className="phia-polaroid-count">16 items</div>
+            </div>
+
+          </div>
+
+          {/* Phia-style Secondary Dark Contrast Section */}
+          <div style={{ 
+            background: '#191715', 
+            borderRadius: '24px', 
+            padding: '34px 20px', 
+            margin: '10px 10px 20px 10px', 
+            color: '#ffffff',
+            textAlign: 'center',
+            boxShadow: '0 15px 40px rgba(0,0,0,0.1)'
+          }}>
+            <h2 style={{ 
+              fontFamily: 'var(--font-serif)', 
+              fontSize: '1.8rem', 
+              color: '#ffffff',
+              fontWeight: 500,
+              lineHeight: 1.2
+            }}>
+              Settle bills with <span style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: '#f3f2ee' }}>optimized</span> splits
+            </h2>
+            <p style={{ fontSize: '0.78rem', color: '#eae9e5', marginTop: '8px', lineHeight: 1.4, padding: '0 10px' }}>
+              Deyibe calculates net balance splits across roommates, minimizing equations for zero math headaches.
+            </p>
+            
+            {/* Split optimization card mockup */}
+            <div style={{
+              background: '#ffffff',
+              borderRadius: '14px',
+              padding: '14px',
+              width: '90%',
+              margin: '22px auto 0 auto',
+              color: '#191715',
+              textAlign: 'left',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+            }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#191715', fontWeight: 800, fontSize: '0.72rem' }}>AB</div>
+                <div>
+                  <div style={{ fontSize: '0.68rem', color: '#8c857e', fontWeight: 600 }}>Debts Optimizer</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>Abhi to Sandeep</div>
+                </div>
+                <span style={{ marginLeft: 'auto', fontSize: '0.85rem', fontWeight: 900, color: 'var(--accent-rose)' }}>$24.50</span>
               </div>
             </div>
           </div>
+
+          {/* Interactive Persona slider showcase */}
+          <div className="landing-card" style={{ margin: '0 10px 20px 10px', background: '#ffffff', border: '1px solid rgba(25, 23, 21, 0.08)' }}>
+            <h3 style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#8c857e', textAlign: 'center', marginBottom: '16px' }}>
+              Deyibe Operations
+            </h3>
+            
+            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginBottom: '16px' }}>
+              <button className={`persona-btn ${activePersona === 'shopper' ? 'active' : ''}`} onClick={() => setActivePersona('shopper')}>
+                Shopping
+              </button>
+              <button className={`persona-btn ${activePersona === 'chore' ? 'active' : ''}`} onClick={() => setActivePersona('chore')}>
+                Chores
+              </button>
+              <button className={`persona-btn ${activePersona === 'finance' ? 'active' : ''}`} onClick={() => setActivePersona('finance')}>
+                Split
+              </button>
+            </div>
+
+            {activePersona === 'shopper' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', animation: 'fadeIn 0.25s' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(25,23,21,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#191715' }}>
+                  <ShoppingCart size={20} />
+                </div>
+                <h4 style={{ fontWeight: 800, fontSize: '0.95rem' }}>Save 30 minutes in-store</h4>
+                <p style={{ fontSize: '0.8rem', color: '#8c857e', lineHeight: 1.4 }}>
+                  Start a live grocery run. Roommates receive notifications and add requests instantly while you shop.
+                </p>
+              </div>
+            )}
+
+            {activePersona === 'chore' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', animation: 'fadeIn 0.25s' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(25,23,21,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#191715' }}>
+                  <CheckSquare size={20} />
+                </div>
+                <h4 style={{ fontWeight: 800, fontSize: '0.95rem' }}>Gamify Room Chores</h4>
+                <p style={{ fontSize: '0.8rem', color: '#8c857e', lineHeight: 1.4 }}>
+                  Complete assigned tasks and watch trash bags slide into containers or plates sparkle with custom animations.
+                </p>
+              </div>
+            )}
+
+            {activePersona === 'finance' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', animation: 'fadeIn 0.25s' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(25,23,21,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#191715' }}>
+                  <DollarSign size={20} />
+                </div>
+                <h4 style={{ fontWeight: 800, fontSize: '0.95rem' }}>Automated Receipt Parsing</h4>
+                <p style={{ fontSize: '0.8rem', color: '#8c857e', lineHeight: 1.4 }}>
+                  Scan receipts using high-precision local character recognition. Split taxes and items seamlessly.
+                </p>
+              </div>
+            )}
+          </div>
+
         </div>
-      </>
+
+      </div>
     );
   }
 
-  // MAIN APPLICATION PANEL
-  return (
-    <>
-      <div className="bg-blobs">
-        <div className="blob blob-1"></div>
-        <div className="blob blob-2"></div>
-        <div className="blob blob-3"></div>
-      </div>
+  // STANDARD AUTHENTICATION MODAL VIEW (PHIA STYLE)
+  if (!session || !currentUserProfile) {
+    return (
+      <div className="app-container" style={{ display: 'flex', background: '#fbfbfa', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+        <div className="glass-card" style={{ width: '100%', padding: '28px', border: '1px solid rgba(25, 23, 21, 0.08)', boxShadow: '0 20px 40px -15px rgba(0,0,0,0.06)' }}>
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <h2 className="brand-title" style={{ justifyContent: 'center', fontSize: '1.9rem', fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontWeight: 700 }}>
+              deyibe
+            </h2>
+            <p style={{ fontSize: '0.72rem', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 700, marginTop: '2px' }}>
+              Kompa Management System
+            </p>
+          </div>
 
+          <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {authMode === 'signup' && (
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#191715', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Nickname</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Abhi" 
+                  value={authName} 
+                  onChange={e => setAuthName(e.target.value)} 
+                  required 
+                  style={{ marginTop: '4px' }}
+                />
+              </div>
+            )}
+            
+            {authMode !== 'verify_otp' && (
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#191715', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email Address</label>
+                <input 
+                  type="email" 
+                  placeholder="you@email.com" 
+                  value={authEmail} 
+                  onChange={e => setAuthEmail(e.target.value)} 
+                  required 
+                  style={{ marginTop: '4px' }}
+                />
+              </div>
+            )}
+
+            {(authMode === 'login' || authMode === 'signup') && (
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#191715', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Password</label>
+                <input 
+                  type="password" 
+                  placeholder="••••••••" 
+                  value={authPassword} 
+                  onChange={e => setAuthPassword(e.target.value)} 
+                  required 
+                  style={{ marginTop: '4px' }}
+                />
+              </div>
+            )}
+
+            {authMode === 'verify_otp' && (
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#191715', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Enter OTP Passcode</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. 123456" 
+                  value={authOtpCode} 
+                  onChange={e => setAuthOtpCode(e.target.value)} 
+                  required 
+                  maxLength={6}
+                  style={{ marginTop: '4px' }}
+                />
+              </div>
+            )}
+
+            <button type="submit" className="btn-primary" style={{ width: '100%', padding: '12px', marginTop: '8px', borderRadius: '6px' }} disabled={authLoading}>
+              {authLoading ? (
+                <RefreshCw size={16} className="animate-spin" style={{ margin: '0 auto' }} />
+              ) : authMode === 'login' ? (
+                'Sign In'
+              ) : authMode === 'signup' ? (
+                'Create Account'
+              ) : authMode === 'forgot_password' ? (
+                'Send One-Time Passcode'
+              ) : (
+                'Verify & Log In'
+              )}
+            </button>
+          </form>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', marginTop: '16px', fontSize: '0.8rem' }}>
+            {authMode === 'login' && (
+              <button 
+                onClick={() => setAuthMode('forgot_password')}
+                style={{ background: 'none', border: 'none', color: '#191715', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Forgot password?
+              </button>
+            )}
+
+            {(authMode === 'forgot_password' || authMode === 'verify_otp') && (
+              <button 
+                onClick={() => setAuthMode('login')}
+                style={{ background: 'none', border: 'none', color: '#191715', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Back to Sign In
+              </button>
+            )}
+
+            <span style={{ color: '#8c857e', fontSize: '0.78rem', marginTop: '4px' }}>
+              {authMode === 'signup' ? 'Already have an account?' : "Don't have an account?"}
+              <button 
+                onClick={() => setAuthMode(authMode === 'signup' ? 'login' : 'signup')}
+                style={{ background: 'none', border: 'none', color: '#191715', fontWeight: 700, marginLeft: '4px', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                {authMode === 'signup' ? 'Sign In' : 'Sign Up'}
+              </button>
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // NO KOMPA JOINED SCREEN VIEW (PHIA STYLE)
+  if (joinedKompas.length === 0) {
+    return (
+      <div className="app-container" style={{ display: 'flex', background: '#fbfbfa', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+        <div className="glass-card" style={{ width: '100%', padding: '26px', border: '1px solid rgba(25, 23, 21, 0.08)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+            <div>
+              <h3 style={{ fontSize: '0.8rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hello, {currentUserProfile.name}!</h3>
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 600, marginTop: '2px', color: '#191715', fontFamily: 'var(--font-serif)' }}>
+                Ready to Join a <span style={{ fontStyle: 'italic' }}>Kompa</span>
+              </h2>
+            </div>
+            <button onClick={handleSignOut} style={{ padding: '6px', borderRadius: '50%', border: 'none', background: 'rgba(25, 23, 21, 0.04)', display: 'flex', alignItems: 'center' }}>
+              <LogOut size={16} style={{ color: '#191715' }} />
+            </button>
+          </div>
+
+          <p style={{ fontSize: '0.82rem', color: '#8c857e', lineHeight: 1.5, marginBottom: '22px', fontWeight: 500 }}>
+            A <i>Kompa</i> is a shared house space. Create a new one or join an existing one using an invite code to coordinate chores and expenses with roommates!
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="glass-card" style={{ padding: '12px', margin: 0, border: '1px solid rgba(25, 23, 21, 0.04)', background: 'transparent' }}>
+              <h4 style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Create new Kompa</h4>
+              <input 
+                type="text" 
+                placeholder="e.g. Avalon Room" 
+                value={kompaNameInput} 
+                onChange={e => setKompaNameInput(e.target.value)} 
+                style={{ padding: '8px' }}
+              />
+              <button 
+                className="btn-primary" 
+                style={{ width: '100%', padding: '8px', fontSize: '0.78rem', marginTop: '8px', borderRadius: '4px' }} 
+                onClick={handleCreateKompa}
+                disabled={dbLoading}
+              >
+                {dbLoading ? 'Creating...' : 'Create Kompa'}
+              </button>
+            </div>
+
+            <div style={{ textAlign: 'center', fontSize: '0.72rem', fontWeight: 800, color: '#8c857e', margin: '4px 0' }}>OR</div>
+
+            <div className="glass-card" style={{ padding: '12px', margin: 0, border: '1px solid rgba(25, 23, 21, 0.04)', background: 'transparent' }}>
+              <h4 style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Join existing Kompa</h4>
+              <input 
+                type="text" 
+                placeholder="Enter 6-digit invite code" 
+                value={kompaCodeInput} 
+                onChange={e => setKompaCodeInput(e.target.value)} 
+                maxLength={6}
+                style={{ padding: '8px' }}
+              />
+              <button 
+                className="btn-secondary" 
+                style={{ width: '100%', padding: '8px', fontSize: '0.78rem', marginTop: '8px', borderRadius: '4px' }} 
+                onClick={handleJoinKompa}
+                disabled={dbLoading}
+              >
+                {dbLoading ? 'Joining...' : 'Join with Code'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // MAIN APPLICATION PANEL (PHIA STYLE)
+  return (
+    <div className="app-container" style={{ background: '#fbfbfa' }}>
+      
       {/* CHORE CELEBRATION MODALS */}
       {choreAnimationType && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(30, 58, 138, 0.92)', backdropFilter: 'blur(10px)',
+          background: 'rgba(25, 23, 21, 0.95)', backdropFilter: 'blur(10px)',
           display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
           zIndex: 99999, color: 'white', animation: 'fadeIn 0.25s ease-out'
         }}>
@@ -1849,24 +1924,24 @@ export default function App() {
                     <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000" floodOpacity="0.15" />
                   </filter>
                 </defs>
-                <rect x="35" y="45" width="30" height="40" rx="4" fill="#64748b" filter="url(#shadow)" />
-                <rect x="31" y="38" width="38" height="6" rx="2" fill="#475569" style={{
+                <rect x="35" y="45" width="30" height="40" rx="4" fill="#8c857e" filter="url(#shadow)" />
+                <rect x="31" y="38" width="38" height="6" rx="2" fill="#5e5954" style={{
                   transformOrigin: '50px 38px',
                   animation: 'lidOpen 2.2s cubic-bezier(0.25, 1, 0.5, 1) infinite'
                 }} />
-                <line x1="41" y1="52" x2="41" y2="78" stroke="#475569" strokeWidth="2" strokeLinecap="round" />
-                <line x1="50" y1="52" x2="50" y2="78" stroke="#475569" strokeWidth="2" strokeLinecap="round" />
-                <line x1="59" y1="52" x2="59" y2="78" stroke="#475569" strokeWidth="2" strokeLinecap="round" />
+                <line x1="41" y1="52" x2="41" y2="78" stroke="#5e5954" strokeWidth="2" strokeLinecap="round" />
+                <line x1="50" y1="52" x2="50" y2="78" stroke="#5e5954" strokeWidth="2" strokeLinecap="round" />
+                <line x1="59" y1="52" x2="59" y2="78" stroke="#5e5954" strokeWidth="2" strokeLinecap="round" />
                 
-                <path d="M 40,0 C 35,5 35,12 42,15 C 45,16 55,16 58,15 C 65,12 65,5 60,0 C 53,5 47,5 40,0 Z" fill="#b45309" style={{
+                <path d="M 40,0 C 35,5 35,12 42,15 C 45,16 55,16 58,15 C 65,12 65,5 60,0 C 53,5 47,5 40,0 Z" fill="#191715" style={{
                   animation: 'bagDrop 2.2s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite'
                 }} />
-                <circle cx="50" cy="-4" r="3" fill="#92400e" style={{
+                <circle cx="50" cy="-4" r="3" fill="#191715" style={{
                   animation: 'bagDropKnot 2.2s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite'
                 }} />
               </svg>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fcd34d', textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>Garbage Bag Disposed!</h2>
-              <p style={{ fontSize: '0.85rem', opacity: 0.8 }}>Nice job keeping the room clean.</p>
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 600, color: '#fcfbf9', fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>Garbage Bag Disposed!</h2>
+              <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Nice job keeping the room clean.</p>
             </div>
           )}
 
@@ -1898,543 +1973,505 @@ export default function App() {
                   animationDelay: '0.5s'
                 }} />
               </svg>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fcd34d', textShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>Kitchen Sparkly Clean!</h2>
-              <p style={{ fontSize: '0.85rem', opacity: 0.8 }}>Utensils sorted and polished.</p>
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 600, color: '#fcfbf9', fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>Kitchen Sparkly Clean!</h2>
+              <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Utensils sorted and polished.</p>
             </div>
           )}
 
           {choreAnimationType === 'general' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-              <Sparkles size={40} style={{ color: '#fbbf24' }} className="animate-bounce" />
-              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fbbf24' }}>Chore Accomplished!</h2>
-              <p style={{ fontSize: '0.85rem', opacity: 0.8 }}>Thank you for helping out.</p>
+              <Sparkles size={40} style={{ color: '#ffffff' }} className="animate-bounce" />
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 600, color: '#fcfbf9', fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>Chore Accomplished!</h2>
+              <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Thank you for helping out.</p>
             </div>
           )}
         </div>
       )}
 
-      {/* SVG Animation Keyframes */}
-      <style>{`
-        @keyframes lidOpen {
-          0% { transform: rotate(0deg); }
-          25% { transform: rotate(-45deg) translate(-5px, -5px); }
-          75% { transform: rotate(-45deg) translate(-5px, -5px); }
-          100% { transform: rotate(0deg); }
-        }
-        @keyframes bagDrop {
-          0% { transform: translateY(-50px) scale(0.9); opacity: 0; }
-          30% { transform: translateY(48px) scale(1); opacity: 1; }
-          75% { transform: translateY(48px) scale(1); opacity: 1; }
-          100% { transform: translateY(48px) scale(0.4); opacity: 0; }
-        }
-        @keyframes bagDropKnot {
-          0% { transform: translateY(-50px); opacity: 0; }
-          30% { transform: translateY(48px); opacity: 1; }
-          75% { transform: translateY(48px); opacity: 1; }
-          100% { transform: translateY(48px) scale(0.4); opacity: 0; }
-        }
-        @keyframes dishSpin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        @keyframes sparkleFlash {
-          0%, 100% { transform: scale(0.8); opacity: 0.3; }
-          50% { transform: scale(1.2); opacity: 1; }
-        }
-        @keyframes bubbleFloat {
-          0% { transform: translateY(0) scale(1); opacity: 0.8; }
-          50% { transform: translateY(-6px) scale(1.1); opacity: 1; }
-          100% { transform: translateY(0) scale(1); opacity: 0.8; }
-        }
-      `}</style>
-
-      <div className="app-container">
-        
-        {/* App Header */}
-        <header className="app-header">
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div className="brand-title" style={{ gap: '6px' }}>
-              <Layers size={18} style={{ color: '#2563eb' }} />
-              Deyibe
-            </div>
-            
-            {/* Active Kompa Switcher */}
-            {activeKompa && (
-              <select 
-                value={activeKompa.id} 
-                onChange={e => {
-                  const target = joinedKompas.find(k => k.id === e.target.value);
-                  if (target) setActiveKompa(target);
-                }}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  padding: '2px 0 0 0',
-                  fontSize: '0.78rem',
-                  fontWeight: 800,
-                  color: '#1e3a8a',
-                  width: 'fit-content',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                {joinedKompas.map(k => (
-                  <option key={k.id} value={k.id}>{k.name}</option>
-                ))}
-              </select>
-            )}
+      {/* App Header */}
+      <header className="app-header" style={{ background: '#fbfbfa', borderBottom: '1px solid rgba(25, 23, 21, 0.05)', padding: '14px 20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontSize: '1.35rem', fontWeight: 700, color: '#191715', display: 'flex', gap: '4px', alignItems: 'center' }}>
+            deyibe
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            
-            {/* Glowing Status indicator */}
-            <div 
+          {/* Active Kompa Select Switcher */}
+          {activeKompa && (
+            <select 
+              value={activeKompa.id} 
+              onChange={e => {
+                const target = joinedKompas.find(k => k.id === e.target.value);
+                if (target) setActiveKompa(target);
+              }}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '4px',
+                border: 'none',
+                background: 'transparent',
+                padding: '2px 0 0 0',
+                fontSize: '0.75rem',
+                fontWeight: 800,
+                color: '#8c857e',
+                width: 'fit-content',
+                outline: 'none',
                 cursor: 'pointer'
               }}
-              onClick={() => setShowDbAlert(true)}
             >
-              {dbSynced ? (
-                <span className="sync-glowing-light" title="Realtime Synced to Supabase"></span>
-              ) : (
-                <span className="local-glowing-light" title="Local Mode"></span>
-              )}
-            </div>
-
-            <div className="pulse-badge" onClick={() => setShowPulse(!showPulse)}>
-              <Bell size={18} />
-              {pulseAlerts.some(a => !a.read) && <span className="pulse-indicator"></span>}
-            </div>
-
-            {/* 2. settings gear icon */}
-            {activeKompa && (
-              <button 
-                onClick={() => setShowSettingsModal(true)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#475569',
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '6px',
-                  borderRadius: '50%',
-                  cursor: 'pointer'
-                }}
-              >
-                <Settings size={18} />
-              </button>
+              {joinedKompas.map(k => (
+                <option key={k.id} value={k.id}>{k.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          
+          {/* Glowing Sync Light */}
+          <div 
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '4px',
+              cursor: 'pointer'
+            }}
+            onClick={() => setShowDbAlert(true)}
+          >
+            {dbSynced ? (
+              <span className="sync-glowing-light" style={{ width: '8px', height: '8px' }} title="Realtime Synced to Supabase"></span>
+            ) : (
+              <span className="local-glowing-light" style={{ width: '8px', height: '8px' }} title="Local Mode"></span>
             )}
+          </div>
 
-            {/* Logout button */}
+          <div className="pulse-badge" style={{ background: 'transparent', border: 'none', padding: '6px' }} onClick={() => setShowPulse(!showPulse)}>
+            <Bell size={18} style={{ color: '#191715' }} />
+            {pulseAlerts.some(a => !a.read) && <span className="pulse-indicator" style={{ top: '4px', right: '4px' }}></span>}
+          </div>
+
+          {/* Settings icon */}
+          {activeKompa && (
             <button 
-              onClick={handleSignOut} 
+              onClick={() => setShowSettingsModal(true)}
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#475569',
+                color: '#191715',
                 display: 'flex',
                 alignItems: 'center',
                 padding: '6px',
-                borderRadius: '50%'
+                borderRadius: '50%',
+                cursor: 'pointer'
               }}
             >
-              <LogOut size={16} />
+              <Settings size={18} />
+            </button>
+          )}
+
+          {/* Logout button */}
+          <button 
+            onClick={handleSignOut} 
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#191715',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '6px',
+              borderRadius: '50%'
+            }}
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
+      </header>
+
+      {/* Database Warning/Info Alert banner */}
+      {showDbAlert && (
+        <div style={{
+          background: 'rgba(25, 23, 21, 0.03)',
+          borderBottom: '1px solid rgba(25, 23, 21, 0.05)',
+          padding: '10px 16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: '0.78rem',
+          color: '#191715',
+          fontWeight: 600,
+          zIndex: 5
+        }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, paddingRight: '8px' }}>
+            <Info size={14} style={{ flexShrink: 0 }} />
+            <span>
+              {dbSynced 
+                ? 'Pulsing green: Realtime connection active. Database tables synced.' 
+                : 'Pulsing amber: Local memory sandbox. Execute SQL in Supabase editor to activate.'}
+            </span>
+          </span>
+          <X size={14} className="cursor-pointer" onClick={() => setShowDbAlert(false)} style={{ flexShrink: 0 }} />
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettingsModal && activeKompa && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999
+        }}>
+          <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Kompa Settings</h3>
+              <X size={18} className="cursor-pointer" onClick={() => setShowSettingsModal(false)} />
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Kompa</label>
+                <div style={{ fontSize: '1rem', fontWeight: 800, marginTop: '2px', color: '#191715' }}>{activeKompa.name}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invite Code</label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#191715', background: 'rgba(25,23,21,0.03)', padding: '6px 12px', borderRadius: '4px', border: '1px dashed rgba(25,23,21,0.15)' }}>
+                    {activeKompa.inviteCode}
+                  </div>
+                  <button 
+                    className="btn-secondary" 
+                    style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '4px' }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(activeKompa.inviteCode);
+                      alert('Invite Code copied to clipboard!');
+                    }}
+                  >
+                    Copy Code
+                  </button>
+                </div>
+              </div>
+
+              <hr style={{ border: 'none', borderTop: '1px solid rgba(25,23,21,0.06)' }} />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button 
+                  className="btn-secondary" 
+                  style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '4px' }}
+                  onClick={() => {
+                    const name = prompt('Enter a new custom name for this Kompa:');
+                    if (name && name.trim()) {
+                      safeDbWrite(() => supabase.from('kompas').update({ name }).eq('id', activeKompa.id));
+                      setActiveKompa({ ...activeKompa, name });
+                      fetchUserKompas(currentUserProfile.id);
+                      setShowSettingsModal(false);
+                    }
+                  }}
+                >
+                  <span>Rename Kompa</span>
+                  <ChevronRight size={14} />
+                </button>
+
+                <button 
+                  className="btn-secondary" 
+                  style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '4px' }}
+                  onClick={() => {
+                    if (joinedKompas.length >= 3) {
+                      alert('Create limit reached (max 3).');
+                    } else {
+                      const name = prompt('Enter name for the new Kompa:');
+                      if (name && name.trim()) {
+                        setKompaNameInput(name);
+                        handleCreateKompa();
+                      }
+                    }
+                  }}
+                >
+                  <span>+ Create New Kompa</span>
+                  <ChevronRight size={14} />
+                </button>
+
+                <button 
+                  className="btn-secondary" 
+                  style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '4px' }}
+                  onClick={() => {
+                    const code = prompt('Enter 6-digit code to join another Kompa:');
+                    if (code && code.trim()) {
+                      setKompaCodeInput(code);
+                      handleJoinKompa();
+                    }
+                  }}
+                >
+                  <span>+ Join Another Kompa</span>
+                  <ChevronRight size={14} />
+                </button>
+
+                <button 
+                  className="btn-secondary" 
+                  style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '4px', color: 'var(--accent-rose)' }}
+                  onClick={handleDeleteLeaveKompa}
+                >
+                  <span>{activeKompa.ownerId === currentUserProfile.id ? 'Permanently Delete Kompa' : 'Leave Kompa'}</span>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pulse Notification drop panel */}
+      {showPulse && (
+        <div className="glass-card" style={{
+          position: 'absolute',
+          top: '110px',
+          right: '15px',
+          left: '15px',
+          zIndex: 100,
+          maxHeight: '380px',
+          overflowY: 'auto',
+          border: '1px solid rgba(25, 23, 21, 0.1)',
+          background: '#ffffff',
+          boxShadow: '0 15px 40px -10px rgba(0, 0, 0, 0.08)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', alignItems: 'center' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.95rem', fontFamily: 'var(--font-serif)' }}>
+              <Zap size={16} style={{ color: 'var(--accent-amber)' }} />
+              Pulse Notifications
+            </h3>
+            <button 
+              onClick={() => {
+                setPulseAlerts(prev => prev.map(a => ({ ...a, read: true })));
+                setShowPulse(false);
+              }} 
+              style={{ fontSize: '0.75rem', background: 'none', border: 'none', color: '#191715', fontWeight: 700, textDecoration: 'underline' }}
+            >
+              Clear all
             </button>
           </div>
-        </header>
-
-        {/* Database Warning/Info Alert banner */}
-        {showDbAlert && (
-          <div style={{
-            background: dbSynced ? 'rgba(4, 120, 87, 0.08)' : 'rgba(180, 83, 9, 0.08)',
-            borderBottom: '1px solid rgba(0, 0, 0, 0.04)',
-            padding: '10px 16px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontSize: '0.78rem',
-            color: dbSynced ? '#047857' : '#b45309',
-            fontWeight: 600,
-            zIndex: 5
-          }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, paddingRight: '8px' }}>
-              <Info size={14} style={{ flexShrink: 0 }} />
-              <span>
-                {dbSynced 
-                  ? 'Pulsing green: Realtime connection active. Database tables synced.' 
-                  : 'Pulsing amber: Local memory sandbox. Execute SQL in Supabase editor to activate.'}
-              </span>
-            </span>
-            <X size={14} className="cursor-pointer" onClick={() => setShowDbAlert(false)} style={{ flexShrink: 0 }} />
-          </div>
-        )}
-
-        {/* Settings Modal (Contains Invite codes and actions) */}
-        {showSettingsModal && activeKompa && (
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
-            display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999
-          }}>
-            <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', alignItems: 'center' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Kompa Settings</h3>
-                <X size={18} className="cursor-pointer" onClick={() => setShowSettingsModal(false)} />
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div>
-                  <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700 }}>Active Kompa</label>
-                  <div style={{ fontSize: '1rem', fontWeight: 800, marginTop: '2px', color: '#0f172a' }}>{activeKompa.name}</div>
+          {pulseAlerts.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#8c857e', padding: '20px 0', fontSize: '0.85rem' }}>All updates verified.</p>
+          ) : (
+            pulseAlerts.map(alert => (
+              <div key={alert.id} style={{
+                padding: '10px 12px',
+                borderRadius: '6px',
+                background: alert.read ? 'transparent' : 'rgba(25, 23, 21, 0.01)',
+                borderLeft: `3px solid ${alert.type === 'alert' ? 'var(--accent-rose)' : alert.type === 'success' ? 'var(--accent-emerald)' : '#191715'}`,
+                marginBottom: '8px',
+                border: '1px solid rgba(25, 23, 21, 0.04)',
+                borderLeftWidth: '3px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, color: '#191715' }}>
+                  <span>{alert.title}</span>
+                  <span style={{ fontSize: '0.7rem', color: '#8c857e', fontWeight: 500 }}>{alert.timestamp}</span>
                 </div>
+                <p style={{ fontSize: '0.8rem', color: '#5e5954', marginTop: '3px', lineHeight: 1.4 }}>{alert.message}</p>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
+      {/* Main Content Area */}
+      <main className="app-content" style={{ paddingBottom: '96px' }}>
+        
+        {/* TAB 1: HOME */}
+        {activeTab === 'home' && (
+          <div>
+            {/* Quick Balances Widget */}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+              <div className="glass-card" style={{ flex: 1, padding: '14px', marginBottom: 0, textAlign: 'center' }}>
+                <div style={{ fontSize: '0.7rem', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Your Balance</div>
+                <div style={{ 
+                  fontSize: '1.3rem', 
+                  fontWeight: 800, 
+                  marginTop: '2px',
+                  color: (netBalances[currentUserProfile.id] || 0) >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'
+                }}>
+                  {(netBalances[currentUserProfile.id] || 0) >= 0 ? '+' : ''}${(netBalances[currentUserProfile.id] || 0).toFixed(2)}
+                </div>
+              </div>
+              <div className="glass-card" style={{ flex: 1, padding: '14px', marginBottom: 0, textAlign: 'center', cursor: 'pointer' }} onClick={() => setActiveTab('shelf')}>
+                <div style={{ fontSize: '0.7rem', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Out of Stock</div>
+                <div style={{ fontSize: '1.3rem', fontWeight: 800, marginTop: '2px', color: '#191715' }}>
+                  {shelfItems.filter(i => i.status === 'out' || i.status === 'low').length} Items
+                </div>
+              </div>
+            </div>
+
+            {/* Active shopping session widget */}
+            {activeRun && (
+              <div className="glass-card" style={{
+                borderLeft: '3px solid #191715',
+                background: 'rgba(25, 23, 21, 0.02)',
+                padding: '12px 14px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer'
+              }} onClick={() => setActiveTab('run')}>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700 }}>Invite Code</label>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#b45309', background: 'rgba(180,83,9,0.06)', padding: '6px 12px', borderRadius: '8px', border: '1px dashed rgba(180,83,9,0.2)' }}>
-                      {activeKompa.inviteCode}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '0.9rem', color: '#191715' }}>
+                    <span className="run-dot" style={{ background: '#191715' }}></span>
+                    Shopping Session: {kompaMembers.find(h => h.id === activeRun.shopperId)?.name} @ {activeRun.store}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#8c857e', marginTop: '2px' }}>
+                    {activeRun.requests.length} requests active. Tap to view requests.
+                  </div>
+                </div>
+                <ArrowRight size={16} style={{ color: '#191715' }} />
+              </div>
+            )}
+
+            {/* Homemates profiles with buzz */}
+            <div className="glass-card" style={{ padding: '14px' }}>
+              <h3 style={{ fontSize: '0.72rem', fontWeight: 800, marginBottom: '10px', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '1px' }}>Homemates</h3>
+              <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', paddingBottom: '4px' }}>
+                {kompaMembers.map(m => (
+                  <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '60px' }}>
+                    <div 
+                      style={{ cursor: 'pointer', position: 'relative' }} 
+                      onClick={() => m.id !== currentUserProfile.id && handleBuzz(m)}
+                    >
+                      {renderInitialsAvatar(m, 44)}
+                      {m.id !== currentUserProfile.id && (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: -2,
+                          right: -2,
+                          background: '#ffffff',
+                          borderRadius: '50%',
+                          padding: '2px',
+                          border: '1px solid rgba(25, 23, 21, 0.15)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          <Zap size={9} style={{ color: 'var(--accent-amber)' }} />
+                        </div>
+                      )}
                     </div>
-                    <button 
-                      className="btn-secondary" 
-                      style={{ padding: '6px 12px', fontSize: '0.75rem' }}
-                      onClick={() => {
-                        navigator.clipboard.writeText(activeKompa.inviteCode);
-                        alert('Invite Code copied to clipboard!');
+                    <span style={{ fontSize: '0.75rem', marginTop: '4px', color: '#191715', fontWeight: 600 }}>
+                      {m.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Shared chores checklist */}
+            <div className="glass-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-serif)' }}>
+                  <CheckSquare size={16} style={{ color: '#191715' }} />
+                  Active Chores
+                </h3>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', background: 'rgba(25, 23, 21, 0.05)', color: '#191715', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                    {tasks.filter(t => !t.completed).length} Pending
+                  </span>
+                  <button className="btn-primary" style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.7rem' }} onClick={() => setShowAddChoreModal(true)}>
+                    Assign
+                  </button>
+                </div>
+              </div>
+
+              {tasks.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#8c857e', fontSize: '0.8rem', padding: '14px 0' }}>No chores configured. Click Assign to create!</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {tasks.map(task => (
+                    <div 
+                      key={task.id} 
+                      onClick={() => handleToggleTask(task)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        background: '#ffffff',
+                        border: '1px solid rgba(25, 23, 21, 0.06)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        opacity: task.completed ? 0.5 : 1
                       }}
                     >
-                      Copy Code
-                    </button>
-                  </div>
-                </div>
-
-                <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.05)' }} />
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <button 
-                    className="btn-secondary" 
-                    style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                    onClick={() => {
-                      const name = prompt('Enter a new custom name for this Kompa:');
-                      if (name && name.trim()) {
-                        safeDbWrite(() => supabase.from('kompas').update({ name }).eq('id', activeKompa.id));
-                        setActiveKompa({ ...activeKompa, name });
-                        fetchUserKompas(currentUserProfile.id);
-                        setShowSettingsModal(false);
-                      }
-                    }}
-                  >
-                    <span>Rename Kompa</span>
-                    <ChevronRight size={14} />
-                  </button>
-
-                  <button 
-                    className="btn-secondary" 
-                    style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                    onClick={() => {
-                      if (joinedKompas.length >= 3) {
-                        alert('Create limit reached (max 3).');
-                      } else {
-                        const name = prompt('Enter name for the new Kompa:');
-                        if (name && name.trim()) {
-                          setKompaNameInput(name);
-                          handleCreateKompa();
-                        }
-                      }
-                    }}
-                  >
-                    <span>+ Create New Kompa</span>
-                    <ChevronRight size={14} />
-                  </button>
-
-                  <button 
-                    className="btn-secondary" 
-                    style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                    onClick={() => {
-                      const code = prompt('Enter 6-digit code to join another Kompa:');
-                      if (code && code.trim()) {
-                        setKompaCodeInput(code);
-                        handleJoinKompa();
-                      }
-                    }}
-                  >
-                    <span>+ Join Another Kompa</span>
-                    <ChevronRight size={14} />
-                  </button>
-
-                  <button 
-                    className="btn-secondary" 
-                    style={{ textAlign: 'left', padding: '10px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--accent-rose)' }}
-                    onClick={handleDeleteLeaveKompa}
-                  >
-                    <span>{activeKompa.ownerId === currentUserProfile.id ? 'Permanently Delete Kompa' : 'Leave Kompa'}</span>
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Pulse Notification drop panel */}
-        {showPulse && (
-          <div className="glass-card" style={{
-            position: 'absolute',
-            top: '110px',
-            right: '15px',
-            left: '15px',
-            zIndex: 100,
-            maxHeight: '380px',
-            overflowY: 'auto',
-            border: '1px solid rgba(0, 0, 0, 0.08)',
-            background: 'rgba(255, 255, 255, 0.98)',
-            boxShadow: '0 15px 40px -10px rgba(0, 0, 0, 0.12)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', alignItems: 'center' }}>
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.95rem' }}>
-                <Zap size={16} style={{ color: 'var(--accent-amber)' }} />
-                Pulse Notifications
-              </h3>
-              <button 
-                onClick={() => {
-                  setPulseAlerts(prev => prev.map(a => ({ ...a, read: true })));
-                  setShowPulse(false);
-                }} 
-                style={{ fontSize: '0.75rem', background: 'none', border: 'none', color: '#2563eb', fontWeight: 700 }}
-              >
-                Clear all
-              </button>
-            </div>
-            {pulseAlerts.length === 0 ? (
-              <p style={{ textAlign: 'center', color: '#64748b', padding: '20px 0', fontSize: '0.85rem' }}>All updates verified.</p>
-            ) : (
-              pulseAlerts.map(alert => (
-                <div key={alert.id} style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  background: alert.read ? 'transparent' : 'rgba(0,0,0,0.01)',
-                  borderLeft: `3px solid ${alert.type === 'alert' ? 'var(--accent-rose)' : alert.type === 'success' ? 'var(--accent-emerald)' : 'var(--accent-blue)'}`,
-                  marginBottom: '8px',
-                  border: '1px solid rgba(0, 0, 0, 0.02)',
-                  borderLeftWidth: '3px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
-                    <span>{alert.title}</span>
-                    <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 500 }}>{alert.timestamp}</span>
-                  </div>
-                  <p style={{ fontSize: '0.8rem', color: '#475569', marginTop: '3px', lineHeight: 1.4 }}>{alert.message}</p>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Main Content Area */}
-        <main className="app-content">
-          
-          {/* TAB 1: HOME (TIMELINE & DASHBOARD) */}
-          {activeTab === 'home' && (
-            <div>
-              {/* Quick Balances Widget */}
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
-                <div className="glass-card" style={{ flex: 1, padding: '14px', marginBottom: 0, textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Your Balance</div>
-                  <div style={{ 
-                    fontSize: '1.3rem', 
-                    fontWeight: 800, 
-                    marginTop: '2px',
-                    color: (netBalances[currentUserProfile.id] || 0) >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'
-                  }}>
-                    {(netBalances[currentUserProfile.id] || 0) >= 0 ? '+' : ''}${(netBalances[currentUserProfile.id] || 0).toFixed(2)}
-                  </div>
-                </div>
-                <div className="glass-card" style={{ flex: 1, padding: '14px', marginBottom: 0, textAlign: 'center', cursor: 'pointer' }} onClick={() => setActiveTab('shelf')}>
-                  <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Out of Stock</div>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, marginTop: '2px', color: '#2563eb' }}>
-                    {shelfItems.filter(i => i.status === 'out' || i.status === 'low').length} Items
-                  </div>
-                </div>
-              </div>
-
-              {/* Active shopping session widget */}
-              {activeRun && (
-                <div className="glass-card" style={{
-                  borderLeft: '4px solid var(--accent-blue)',
-                  background: 'rgba(37, 99, 235, 0.05)',
-                  padding: '12px 14px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  cursor: 'pointer'
-                }} onClick={() => setActiveTab('run')}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>
-                      <span className="run-dot"></span>
-                      Shopping Session: {kompaMembers.find(h => h.id === activeRun.shopperId)?.name} @ {activeRun.store}
-                    </div>
-                    <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
-                      {activeRun.requests.length} requests active. Tap to view requests.
-                    </div>
-                  </div>
-                  <ArrowRight size={16} style={{ color: 'var(--accent-blue)' }} />
-                </div>
-              )}
-
-              {/* Homemates profile list with buzz feature */}
-              <div className="glass-card" style={{ padding: '14px' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '10px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Homemates</h3>
-                <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', paddingBottom: '4px' }}>
-                  {kompaMembers.map(m => (
-                    <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '60px' }}>
-                      <div 
-                        style={{ cursor: 'pointer', position: 'relative' }} 
-                        onClick={() => m.id !== currentUserProfile.id && handleBuzz(m)}
-                      >
-                        {renderInitialsAvatar(m, 44)}
-                        {m.id !== currentUserProfile.id && (
-                          <div style={{
-                            position: 'absolute',
-                            bottom: -2,
-                            right: -2,
-                            background: '#ffffff',
-                            borderRadius: '50%',
-                            padding: '2px',
-                            border: '1px solid rgba(0,0,0,0.06)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}>
-                            <Zap size={9} style={{ color: 'var(--accent-amber)' }} />
-                          </div>
-                        )}
+                      {task.completed ? (
+                        <CheckSquare size={16} style={{ color: '#191715' }} />
+                      ) : (
+                        <Square size={16} style={{ color: 'rgba(25,23,21,0.25)' }} />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ 
+                          fontSize: '0.85rem', 
+                          fontWeight: 600,
+                          textDecoration: task.completed ? 'line-through' : 'none',
+                          color: '#191715'
+                        }}>
+                          {task.title}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#8c857e', marginTop: '1px', display: 'flex', gap: '6px' }}>
+                          <span>Due: {task.dueDate}</span>
+                          <span>•</span>
+                          <span>Assigned: {task.assignedTo.map(id => kompaMembers.find(h => h.id === id)?.name).join(', ')}</span>
+                        </div>
                       </div>
-                      <span style={{ fontSize: '0.75rem', marginTop: '4px', color: '#475569', fontWeight: 600 }}>
-                        {m.name}
-                      </span>
                     </div>
                   ))}
                 </div>
-              </div>
+              )}
+            </div>
 
-              {/* Shared chores checklist */}
-              <div className="glass-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <CheckSquare size={16} style={{ color: 'var(--accent-emerald)' }} />
-                    Active Chores
-                  </h3>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.7rem', background: 'rgba(4, 120, 87, 0.1)', color: '#047857', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
-                      {tasks.filter(t => !t.completed).length} Pending
-                    </span>
-                    <button className="btn-primary" style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem' }} onClick={() => setShowAddChoreModal(true)}>
-                      Assign
-                    </button>
+            {/* Add Chore Modal */}
+            {showAddChoreModal && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Assign Chore</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => setShowAddChoreModal(false)} />
                   </div>
-                </div>
-
-                {tasks.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8rem', padding: '14px 0' }}>No chores configured. Click Assign to create!</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {tasks.map(task => (
-                      <div 
-                        key={task.id} 
-                        onClick={() => handleToggleTask(task)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                          padding: '8px 10px',
-                          borderRadius: '8px',
-                          background: 'rgba(255,255,255,0.4)',
-                          border: '1px solid rgba(0, 0, 0, 0.03)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          opacity: task.completed ? 0.5 : 1
-                        }}
-                      >
-                        {task.completed ? (
-                          <CheckSquare size={16} style={{ color: 'var(--accent-emerald)' }} />
-                        ) : (
-                          <Square size={16} style={{ color: 'rgba(0,0,0,0.25)' }} />
-                        )}
-                        <div style={{ flex: 1 }}>
-                          <div style={{ 
-                            fontSize: '0.85rem', 
-                            fontWeight: 600,
-                            textDecoration: task.completed ? 'line-through' : 'none',
-                            color: '#1e293b'
-                          }}>
-                            {task.title}
-                          </div>
-                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px', display: 'flex', gap: '6px' }}>
-                            <span>Due: {task.dueDate}</span>
-                            <span>•</span>
-                            <span>Assigned: {task.assignedTo.map(id => kompaMembers.find(h => h.id === id)?.name).join(', ')}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Add Chore Modal */}
-              {showAddChoreModal && (
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
-                }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Assign Chore</h3>
-                      <X size={18} className="cursor-pointer" onClick={() => setShowAddChoreModal(false)} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Title</label>
+                      <input type="text" placeholder="e.g. Throw garbage, Clean plates" value={newChoreTitle} onChange={e => setNewChoreTitle(e.target.value)} style={{ marginTop: '4px' }} />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Title</label>
-                        <input type="text" placeholder="e.g. Throw garbage, Clean plates" value={newChoreTitle} onChange={e => setNewChoreTitle(e.target.value)} style={{ marginTop: '4px' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Chore Type (Graphic Specific)</label>
-                        <select value={newChoreType} onChange={e => setNewChoreType(e.target.value as any)} style={{ marginTop: '4px' }}>
-                          <option value="general">General (Standard Confetti)</option>
-                          <option value="trash">Trash (Garbage bag falling animation)</option>
-                          <option value="kitchen">Kitchen / Utensils (Plate washing animation)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Due Date</label>
-                        <input type="date" value={newChoreDueDate} onChange={e => setNewChoreDueDate(e.target.value)} style={{ marginTop: '4px' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Frequency</label>
-                        <select value={newChoreFrequency} onChange={e => setNewChoreFrequency(e.target.value as any)} style={{ marginTop: '4px' }}>
-                          <option value="once">Once</option>
-                          <option value="daily">Daily</option>
-                          <option value="weekly">Weekly</option>
-                          <option value="monthly">Monthly</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Assign Roommates</label>
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                          {kompaMembers.map(m => (
-                            <button
-                              key={m.id}
-                              style={{
-                                padding: '5px 8px', fontSize: '0.72rem', borderRadius: '6px',
-                                border: '1px solid rgba(0,0,0,0.06)',
-                                background: newChoreAssignedTo.includes(m.id) ? '#2563eb' : 'rgba(0,0,0,0.02)',
-                                color: newChoreAssignedTo.includes(m.id) ? 'white' : '#475569'
-                              }}
-                              onClick={() => {
-                                if (newChoreAssignedTo.includes(m.id)) {
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Chore Type (Graphic Specific)</label>
+                      <select value={newChoreType} onChange={e => setNewChoreType(e.target.value as any)} style={{ marginTop: '4px' }}>
+                        <option value="general">General (Standard Confetti)</option>
+                        <option value="trash">Trash (Garbage bag falling animation)</option>
+                        <option value="kitchen">Kitchen / Utensils (Plate washing animation)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Due Date</label>
+                      <input type="date" value={newChoreDueDate} onChange={e => setNewChoreDueDate(e.target.value)} style={{ marginTop: '4px' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Frequency</label>
+                      <select value={newChoreFrequency} onChange={e => setNewChoreFrequency(e.target.value as any)} style={{ marginTop: '4px' }}>
+                        <option value="once">Once</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Assign Roommates</label>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                        {kompaMembers.map(m => (
+                          <button
+                            key={m.id}
+                            style={{
+                              padding: '5px 8px', fontSize: '0.72rem', borderRadius: '4px',
+                              border: '1px solid rgba(25, 23, 21, 0.15)',
+                              background: newChoreAssignedTo.includes(m.id) ? '#191715' : 'transparent',
+                              color: newChoreAssignedTo.includes(m.id) ? 'white' : '#191715'
+                            }}
+                            onClick={() => {
+                              if (newChoreAssignedTo.includes(m.id)) {
                                   setNewChoreAssignedTo(newChoreAssignedTo.filter(id => id !== m.id));
                                 } else {
                                   setNewChoreAssignedTo([...newChoreAssignedTo, m.id]);
@@ -2448,18 +2485,18 @@ export default function App() {
                       </div>
 
                       <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                        <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setShowAddChoreModal(false)}>Cancel</button>
-                        <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleAddChore}>Assign</button>
+                        <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setShowAddChoreModal(false)}>Cancel</button>
+                        <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleAddChore}>Assign</button>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Activity Timeline (Flow) */}
+              {/* House Flow activity timeline */}
               <div className="glass-card">
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Clock size={16} style={{ color: 'var(--accent-purple)' }} />
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-serif)' }}>
+                  <Clock size={16} style={{ color: '#191715' }} />
                   House Flow
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative' }}>
@@ -2469,7 +2506,7 @@ export default function App() {
                     top: '10px',
                     bottom: '10px',
                     width: '1.5px',
-                    background: 'rgba(0,0,0,0.04)'
+                    background: 'rgba(25,23,21,0.06)'
                   }}></div>
                   {flowLogs.slice(0, 5).map(log => (
                     <div key={log.id} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -2477,881 +2514,896 @@ export default function App() {
                         width: '24px',
                         height: '24px',
                         borderRadius: '50%',
-                        background: 'rgba(255, 255, 255, 0.9)',
-                        border: '1.5px solid rgba(0,0,0,0.03)',
+                        background: '#ffffff',
+                        border: '1.5px solid rgba(25,23,21,0.06)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        zIndex: 1,
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                        zIndex: 1
                       }}>
                         {renderFlowIcon(log.type)}
                       </div>
                       <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: '0.82rem', color: '#334155', fontWeight: 500 }}>{log.text}</p>
-                        <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{log.time}</span>
+                        <p style={{ fontSize: '0.82rem', color: '#191715', fontWeight: 500 }}>{log.text}</p>
+                        <span style={{ fontSize: '0.7rem', color: '#8c857e' }}>{log.time}</span>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
+          </div>
+        )}
+
+        {/* TAB 2: SHELF & WISHLIST SHOWCASE */}
+        {activeTab === 'shelf' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Shelf & Catalog</h2>
+                
+                {/* Sub-tab selection */}
+                <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                  <button 
+                    className={`persona-btn ${shelfSubTab === 'catalog' ? 'active' : ''}`}
+                    onClick={() => setShelfSubTab('catalog')}
+                    style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                  >
+                    Stock Inventory
+                  </button>
+                  <button 
+                    className={`persona-btn ${shelfSubTab === 'inventory' ? 'active' : ''}`}
+                    onClick={() => setShelfSubTab('inventory')}
+                    style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                  >
+                    Wishlist & Assets
+                  </button>
+                </div>
+              </div>
+
+              {shelfSubTab === 'catalog' ? (
+                <button className="btn-primary" style={{ padding: '7px 12px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                  onClick={() => setShowAddShelfModal(true)}>
+                  <Plus size={14} />
+                  Add Stock
+                </button>
+              ) : (
+                <button className="btn-primary" style={{ padding: '7px 12px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                  onClick={() => setShowAddInventoryModal(true)}>
+                  <Plus size={14} />
+                  Add Asset
+                </button>
+              )}
             </div>
-          )}
 
-          {/* TAB 2: SHELF & WISHLIST SHOWCASE */}
-          {activeTab === 'shelf' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <div>
-                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Shelf & Catalog</h2>
-                  
-                  {/* Sub-tab selection */}
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                    <button 
-                      className={`persona-btn ${shelfSubTab === 'catalog' ? 'active' : ''}`}
-                      onClick={() => setShelfSubTab('catalog')}
-                      style={{ padding: '4px 10px', fontSize: '0.72rem' }}
-                    >
-                      Stock Inventory
-                    </button>
-                    <button 
-                      className={`persona-btn ${shelfSubTab === 'inventory' ? 'active' : ''}`}
-                      onClick={() => setShelfSubTab('inventory')}
-                      style={{ padding: '4px 10px', fontSize: '0.72rem' }}
-                    >
-                      Wishlist & Assets
-                    </button>
+            {/* Sub tab 1: Standard Stock Catalog */}
+            {shelfSubTab === 'catalog' && (
+              <div className="shelf-board">
+                {shelfItems.map(item => (
+                  <div 
+                    key={item.id} 
+                    className={`shelf-item-card ${item.status === 'stocked' ? 'stocked' : ''}`}
+                    onClick={() => setShowShelfDetailsModal(item)}
+                    style={{
+                      borderLeft: `3px solid ${item.priority === 'high' ? 'var(--accent-rose)' : item.priority === 'medium' ? 'var(--accent-amber)' : '#191715'}`,
+                      background: '#ffffff',
+                      border: '1px solid rgba(25, 23, 21, 0.06)',
+                      borderLeftWidth: '3px',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <span className="shelf-item-name" style={{ color: '#191715' }}>{item.name}</span>
+                    </div>
+
+                    <div style={{ marginTop: '8px' }}>
+                      <span className={`shelf-status-pill ${item.status}`}>
+                        {item.status === 'stocked' ? 'Stocked' : item.status === 'low' ? 'Low Stock' : 'Out of stock'}
+                      </span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', color: '#8c857e', marginTop: '6px', fontWeight: 500 }}>
+                        <span>by {kompaMembers.find(h => h.id === item.addedById)?.name}</span>
+                        <span>{item.timestamp}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-
-                {shelfSubTab === 'catalog' ? (
-                  <button className="btn-primary" style={{ padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
-                    onClick={() => setShowAddShelfModal(true)}>
-                    <Plus size={14} />
-                    Add Stock
-                  </button>
-                ) : (
-                  <button className="btn-primary" style={{ padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
-                    onClick={() => setShowAddInventoryModal(true)}>
-                    <Plus size={14} />
-                    Add Asset
-                  </button>
-                )}
+                ))}
               </div>
+            )}
 
-              {/* Sub tab 1: Standard stock Inventory */}
-              {shelfSubTab === 'catalog' && (
-                <div className="shelf-board">
-                  {shelfItems.map(item => (
-                    <div 
-                      key={item.id} 
-                      className={`shelf-item-card ${item.status === 'stocked' ? 'stocked' : ''}`}
-                      onClick={() => setShowShelfDetailsModal(item)}
-                      style={{
-                        borderLeft: `3px solid ${item.priority === 'high' ? 'var(--accent-rose)' : item.priority === 'medium' ? 'var(--accent-amber)' : 'var(--accent-blue)'}`
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                        <span className="shelf-item-name">{item.name}</span>
-                      </div>
-
-                      <div style={{ marginTop: '8px' }}>
-                        <span className={`shelf-status-pill ${item.status}`}>
-                          {item.status === 'stocked' ? 'Stocked' : item.status === 'low' ? 'Low Stock' : 'Out of stock'}
-                        </span>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', color: '#94a3b8', marginTop: '6px', fontWeight: 500 }}>
-                          <span>by {kompaMembers.find(h => h.id === item.addedById)?.name}</span>
-                          <span>{item.timestamp}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Sub tab 2: Wishlist inventory asset showcase */}
-              {shelfSubTab === 'inventory' && (
-                <div>
-                  {inventoryItems.length === 0 ? (
-                    <div className="glass-card" style={{ padding: '30px 16px', textAlign: 'center' }}>
-                      <ImageIcon size={30} style={{ color: 'var(--accent-purple)', margin: '0 auto 10px' }} />
-                      <h4 style={{ fontWeight: 800 }}>No Wishlist Assets</h4>
-                      <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '4px' }}>
-                        Add appliances, household items, or wishlist entries you want to share with roommates.
-                      </p>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {inventoryItems.map(item => (
-                        <div key={item.id} className="glass-card" style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '12px', margin: 0 }}>
-                          {renderWishlistClipart(item.imageUrl || '')}
-                          
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1e293b' }}>{item.name}</div>
-                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px', display: 'flex', gap: '8px' }}>
-                              <span>Price: ${item.price?.toFixed(2)}</span>
-                              <span>•</span>
-                              <span>Added by: {item.addedBy}</span>
-                            </div>
+            {/* Sub tab 2: Shared Wishlist assets */}
+            {shelfSubTab === 'inventory' && (
+              <div>
+                {inventoryItems.length === 0 ? (
+                  <div className="glass-card" style={{ padding: '30px 16px', textAlign: 'center' }}>
+                    <ImageIcon size={30} style={{ color: '#191715', margin: '0 auto 10px' }} />
+                    <h4 style={{ fontWeight: 800 }}>No Wishlist Assets</h4>
+                    <p style={{ fontSize: '0.78rem', color: '#8c857e', marginTop: '4px' }}>
+                      Add appliances, household items, or wishlist entries you want to share with roommates.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {inventoryItems.map(item => (
+                      <div key={item.id} className="glass-card" style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '12px', margin: 0 }}>
+                        {renderWishlistClipart(item.imageUrl || '')}
+                        
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#191715' }}>{item.name}</div>
+                          <div style={{ fontSize: '0.75rem', color: '#8c857e', marginTop: '1px', display: 'flex', gap: '8px' }}>
+                            <span>Price: ${item.price?.toFixed(2)}</span>
+                            <span>•</span>
+                            <span>Added by: {item.addedBy}</span>
                           </div>
-
-                          {item.itemUrl && (
-                            <a 
-                              href={item.itemUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              style={{ padding: '8px', borderRadius: '50%', background: 'rgba(0,0,0,0.03)', color: '#2563eb', display: 'flex' }}
-                            >
-                              <ExternalLink size={14} />
-                            </a>
-                          )}
-                          
-                          <button 
-                            onClick={async () => {
-                              const confirmDel = window.confirm('Remove this asset from wishlist?');
-                              if (confirmDel) {
-                                setInventoryItems(prev => prev.filter(i => i.id !== item.id));
-                                if (dbSynced) {
-                                  await supabase.from('inventory_items').delete().eq('id', item.id);
-                                }
-                              }
-                            }}
-                            style={{ background: 'none', border: 'none', padding: '8px', color: 'var(--accent-rose)', cursor: 'pointer' }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
 
-              {/* Add item to Shelf Modal */}
-              {showAddShelfModal && (
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
-                }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Add Catalog Item</h3>
-                      <X size={18} className="cursor-pointer" onClick={() => setShowAddShelfModal(false)} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Item Name</label>
-                        <input type="text" placeholder="e.g. Toilet Paper, Eggs" value={newShelfName} onChange={e => setNewShelfName(e.target.value)} style={{ marginTop: '4px' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Priority Level</label>
-                        <select value={newShelfPriority} onChange={e => setNewShelfPriority(e.target.value as any)} style={{ marginTop: '4px' }}>
-                          <option value="high">High (Urgent)</option>
-                          <option value="medium">Medium (Regular)</option>
-                          <option value="low">Low (Optional)</option>
-                        </select>
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                        <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setShowAddShelfModal(false)}>Cancel</button>
-                        <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleAddShelfItem}>Add Item</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Add Wishlist Asset Modal */}
-              {showAddInventoryModal && (
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
-                }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Add Wishlist Asset</h3>
-                      <X size={18} className="cursor-pointer" onClick={() => setShowAddInventoryModal(false)} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Asset Name</label>
-                        <input type="text" placeholder="e.g. Dyson Vacuum V15, Coffee Pot" value={newInvName} onChange={e => setNewInvName(e.target.value)} style={{ marginTop: '4px' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Estimated Price ($)</label>
-                        <input type="number" placeholder="e.g. 299.99" value={newInvPrice} onChange={e => setNewInvPrice(e.target.value)} style={{ marginTop: '4px' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Item Link URL</label>
-                        <input type="text" placeholder="e.g. https://amazon.com/..." value={newInvUrl} onChange={e => setNewInvUrl(e.target.value)} style={{ marginTop: '4px' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Realistic Clipart Clazz</label>
-                        <select value={newInvCategory} onChange={e => setNewInvCategory(e.target.value as any)} style={{ marginTop: '4px' }}>
-                          <option value="coffee">Coffee Maker (Nespresso style)</option>
-                          <option value="vacuum">Vacuum (Dyson style)</option>
-                          <option value="toaster">Toaster (Smeg style)</option>
-                          <option value="speaker">Smart Speaker (Sonos style)</option>
-                        </select>
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                        <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setShowAddInventoryModal(false)}>Cancel</button>
-                        <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleAddInventory}>Add Wishlist</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Shelf Item Details / Restock Modal */}
-              {showShelfDetailsModal && (
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
-                }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Item Properties</h3>
-                      <X size={18} className="cursor-pointer" onClick={() => setShowShelfDetailsModal(null)} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', textAlign: 'center' }}>
-                      <div style={{
-                        width: '50px', height: '50px', borderRadius: '50%',
-                        background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.04)',
-                        display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center'
-                      }}>
-                        <Package size={22} style={{ color: 'var(--accent-purple)' }} />
-                      </div>
-                      <div>
-                        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>{showShelfDetailsModal.name}</h2>
-                        <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
-                          Registered by {kompaMembers.find(h => h.id === showShelfDetailsModal.addedById)?.name || 'Roommate'}
-                        </p>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px' }}>
-                        <button 
-                          className="btn-primary" 
-                          style={{ 
-                            flex: 1, 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center', 
-                            gap: '4px',
-                            background: showShelfDetailsModal.status === 'stocked' ? 'var(--accent-amber)' : 'var(--accent-emerald)',
-                            padding: '9px'
-                          }} 
-                          onClick={() => handleToggleRestock(showShelfDetailsModal)}
-                        >
-                          <Check size={16} />
-                          {showShelfDetailsModal.status === 'stocked' ? 'Mark running low' : 'Mark restocked'}
-                        </button>
+                        {item.itemUrl && (
+                          <a 
+                            href={item.itemUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            style={{ padding: '8px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.04)', color: '#191715', display: 'flex' }}
+                          >
+                            <ExternalLink size={14} />
+                          </a>
+                        )}
                         
                         <button 
-                          className="btn-secondary" 
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 12px' }}
-                          onClick={() => handleDeleteShelfItem(showShelfDetailsModal.id)}
+                          onClick={async () => {
+                            const confirmDel = window.confirm('Remove this asset from wishlist?');
+                            if (confirmDel) {
+                              setInventoryItems(prev => prev.filter(i => i.id !== item.id));
+                              if (dbSynced) {
+                                await supabase.from('inventory_items').delete().eq('id', item.id);
+                              }
+                            }
+                          }}
+                          style={{ background: 'none', border: 'none', padding: '8px', color: 'var(--accent-rose)', cursor: 'pointer' }}
                         >
-                          <Trash2 size={16} style={{ color: 'var(--accent-rose)' }} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Add stock modal */}
+            {showAddShelfModal && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Add Catalog Item</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => setShowAddShelfModal(false)} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Item Name</label>
+                      <input type="text" placeholder="e.g. Toilet Paper, Eggs" value={newShelfName} onChange={e => setNewShelfName(e.target.value)} style={{ marginTop: '4px' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Priority Level</label>
+                      <select value={newShelfPriority} onChange={e => setNewShelfPriority(e.target.value as any)} style={{ marginTop: '4px' }}>
+                        <option value="high">High (Urgent)</option>
+                        <option value="medium">Medium (Regular)</option>
+                        <option value="low">Low (Optional)</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setShowAddShelfModal(false)}>Cancel</button>
+                      <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleAddShelfItem}>Add Item</button>
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-            </div>
-          )}
-
-          {/* TAB 3: RUN (COLLABORATIVE SHOPPING SESSION) */}
-          {activeTab === 'run' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <div>
-                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Run</h2>
-                  <p style={{ fontSize: '0.78rem', color: '#64748b' }}>Real-time in-store requests coordination</p>
+            {/* Add Wishlist Asset modal */}
+            {showAddInventoryModal && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Add Wishlist Asset</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => setShowAddInventoryModal(false)} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Asset Name</label>
+                      <input type="text" placeholder="e.g. Dyson Vacuum V15, Coffee Pot" value={newInvName} onChange={e => setNewInvName(e.target.value)} style={{ marginTop: '4px' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Estimated Price ($)</label>
+                      <input type="number" placeholder="e.g. 299.99" value={newInvPrice} onChange={e => setNewInvPrice(e.target.value)} style={{ marginTop: '4px' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Item Link URL</label>
+                      <input type="text" placeholder="e.g. https://amazon.com/..." value={newInvUrl} onChange={e => setNewInvUrl(e.target.value)} style={{ marginTop: '4px' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Realistic Clipart Clazz</label>
+                      <select value={newInvCategory} onChange={e => setNewInvCategory(e.target.value as any)} style={{ marginTop: '4px' }}>
+                        <option value="coffee">Coffee Maker (Nespresso style)</option>
+                        <option value="vacuum">Vacuum (Dyson style)</option>
+                        <option value="toaster">Toaster (Smeg style)</option>
+                        <option value="speaker">Smart Speaker (Sonos style)</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setShowAddInventoryModal(false)}>Cancel</button>
+                      <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleAddInventory}>Add Wishlist</button>
+                    </div>
+                  </div>
                 </div>
               </div>
+            )}
 
-              {!activeRun ? (
-                <div className="glass-card" style={{ padding: '24px 16px', textAlign: 'center' }}>
-                  <div style={{
-                    width: '54px', height: '54px', borderRadius: '50%',
-                    background: 'rgba(37, 99, 235, 0.08)', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px'
-                  }}>
-                    <ShoppingCart size={24} style={{ color: 'var(--accent-blue)' }} />
+            {/* Shelf Item properties modal */}
+            {showShelfDetailsModal && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Item Properties</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => setShowShelfDetailsModal(null)} />
                   </div>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '4px' }}>No Active Session</h3>
-                  <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '16px' }}>
-                    Shopping at a local store? Initiate a session to alert your roommates for requests.
-                  </p>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <button className="btn-primary" onClick={() => handleStartRun('Costco')}>Start Costco Run</button>
-                    <button className="btn-secondary" onClick={() => handleStartRun('Walmart')}>Start Walmart Run</button>
-                    
-                    {/* Custom Run Entry field */}
-                    <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
-                      <input 
-                        type="text" 
-                        placeholder="Enter custom store (e.g. Target, Trader Joe's)..." 
-                        value={customStoreInput} 
-                        onChange={e => setCustomStoreInput(e.target.value)} 
-                        style={{ padding: '9px', fontSize: '0.85rem' }}
-                      />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', textAlign: 'center' }}>
+                    <div style={{
+                      width: '50px', height: '50px', borderRadius: '50%',
+                      background: 'rgba(25,23,21,0.03)', border: '1px solid rgba(25,23,21,0.06)',
+                      display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center'
+                    }}>
+                      <Package size={22} style={{ color: '#191715' }} />
+                    </div>
+                    <div>
+                      <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#191715', fontFamily: 'var(--font-serif)' }}>{showShelfDetailsModal.name}</h2>
+                      <p style={{ fontSize: '0.78rem', color: '#8c857e', marginTop: '2px' }}>
+                        Registered by {kompaMembers.find(h => h.id === showShelfDetailsModal.addedById)?.name || 'Roommate'}
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px' }}>
                       <button 
                         className="btn-primary" 
-                        style={{ padding: '9px 12px', fontSize: '0.78rem', flexShrink: 0 }}
-                        onClick={() => {
-                          if (customStoreInput.trim()) {
-                            handleStartRun(customStoreInput.trim());
-                            setCustomStoreInput('');
-                          }
-                        }}
+                        style={{ 
+                          flex: 1, 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          gap: '4px',
+                          background: showShelfDetailsModal.status === 'stocked' ? 'var(--accent-amber)' : 'var(--accent-emerald)',
+                          borderColor: showShelfDetailsModal.status === 'stocked' ? 'var(--accent-amber)' : 'var(--accent-emerald)',
+                          padding: '9px',
+                          borderRadius: '4px'
+                        }} 
+                        onClick={() => handleToggleRestock(showShelfDetailsModal)}
                       >
-                        + Custom
+                        <Check size={16} />
+                        {showShelfDetailsModal.status === 'stocked' ? 'Mark running low' : 'Mark restocked'}
+                      </button>
+                      
+                      <button 
+                        className="btn-secondary" 
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 12px', borderRadius: '4px' }}
+                        onClick={() => handleDeleteShelfItem(showShelfDetailsModal.id)}
+                      >
+                        <Trash2 size={16} style={{ color: 'var(--accent-rose)' }} />
                       </button>
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div>
-                  <div className="glass-card" style={{ borderLeft: '4px solid var(--accent-blue)', padding: '14px', marginBottom: '12px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    {renderRetailerLogo(activeRun.store)}
-                    
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--accent-blue)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        LIVE COLLABORATION ACTIVE
-                      </div>
-                      <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '2px', color: '#0f172a' }}>
-                        {kompaMembers.find(h => h.id === activeRun.shopperId)?.name}'s {activeRun.store} Run
-                      </h3>
-                    </div>
-                    <span className="run-dot"></span>
-                  </div>
+              </div>
+            )}
 
-                  {/* Requests list */}
-                  <div className="glass-card" style={{ padding: '14px' }}>
-                    <h4 style={{ fontSize: '0.85rem', fontWeight: 800, marginBottom: '10px', color: '#475569' }}>Active Run requests</h4>
-                    
-                    {activeRun.requests.length === 0 ? (
-                      <p style={{ textAlign: 'center', color: '#64748b', padding: '14px 0', fontSize: '0.8rem' }}>
-                        No items requested. Send request below.
-                      </p>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                        {activeRun.requests.map(req => (
-                          <div 
-                            key={req.id} 
-                            style={{
-                              padding: '10px', borderRadius: '8px', 
-                              background: 'rgba(255,255,255,0.4)', border: '1px solid rgba(0,0,0,0.03)',
-                              display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                            }}
-                          >
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>
-                                {req.itemName}
-                              </div>
-                              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px' }}>
-                                Requested by: {kompaMembers.find(h => h.id === req.requesterId)?.name}
-                              </div>
-                            </div>
-                            
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              {req.status === 'pending' || req.status === 'searching' ? (
-                                <>
-                                  <button 
-                                    style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '5px', border: 'none', background: 'var(--accent-emerald)', color: 'white' }}
-                                    onClick={() => handleUpdateRunRequestStatus(req.id, 'found', 8.50)}
-                                  >
-                                    Found
-                                  </button>
-                                  <button 
-                                    style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '5px', border: 'none', background: 'var(--accent-rose)', color: 'white' }}
-                                    onClick={() => handleUpdateRunRequestStatus(req.id, 'replaced', undefined, 'Alternative Item', 7.99)}
-                                  >
-                                    Replace
-                                  </button>
-                                  <button 
-                                    style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '5px', border: 'none', background: 'rgba(0,0,0,0.06)', color: '#475569' }}
-                                    onClick={() => handleUpdateRunRequestStatus(req.id, 'out')}
-                                  >
-                                    Out
-                                  </button>
-                                </>
-                              ) : (
-                                <span style={{
-                                  fontSize: '0.7rem', fontWeight: 800, padding: '3px 6px', borderRadius: '4px',
-                                  background: req.status === 'found' ? 'rgba(4, 120, 87, 0.1)' : req.status === 'replaced' ? 'rgba(180, 83, 9, 0.1)' : 'rgba(185, 28, 28, 0.1)',
-                                  color: req.status === 'found' ? '#047857' : req.status === 'replaced' ? '#b45309' : '#b91c1c',
-                                  textTransform: 'uppercase'
-                                }}>
-                                  {req.status} {req.price && `($${req.price})`}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+          </div>
+        )}
 
-                    {/* Add new request */}
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <input 
-                        type="text" 
-                        placeholder="Request item..." 
-                        value={newRequestName} 
-                        onChange={e => setNewRequestName(e.target.value)} 
-                        style={{ padding: '9px' }}
-                      />
-                      <button className="btn-primary" style={{ padding: '0 12px', fontSize: '0.8rem' }} onClick={handleAddRunRequest}>Request</button>
-                    </div>
-                  </div>
+        {/* TAB 3: RUN */}
+        {activeTab === 'run' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Run</h2>
+                <p style={{ fontSize: '0.78rem', color: '#8c857e' }}>Real-time in-store requests coordination</p>
+              </div>
+            </div>
 
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setActiveRun(null)}>Cancel Run</button>
-                    <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleCheckoutRun}>
-                      Complete Checkout
+            {!activeRun ? (
+              <div className="glass-card" style={{ padding: '24px 16px', textAlign: 'center' }}>
+                <div style={{
+                  width: '54px', height: '54px', borderRadius: '50%',
+                  background: 'rgba(25, 23, 21, 0.05)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px'
+                }}>
+                  <ShoppingCart size={24} style={{ color: '#191715' }} />
+                </div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '4px' }}>No Active Session</h3>
+                <p style={{ fontSize: '0.8rem', color: '#8c857e', marginBottom: '16px', fontWeight: 500 }}>
+                  Shopping at a local store? Initiate a session to alert your roommates for requests.
+                </p>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <button className="btn-primary" style={{ borderRadius: '4px' }} onClick={() => handleStartRun('Costco')}>Start Costco Run</button>
+                  <button className="btn-secondary" style={{ borderRadius: '4px' }} onClick={() => handleStartRun('Walmart')}>Start Walmart Run</button>
+                  
+                  {/* Custom run configuration fields */}
+                  <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
+                    <input 
+                      type="text" 
+                      placeholder="Enter custom store (e.g. Target, Trader Joe's)..." 
+                      value={customStoreInput} 
+                      onChange={e => setCustomStoreInput(e.target.value)} 
+                      style={{ padding: '9px', fontSize: '0.85rem' }}
+                    />
+                    <button 
+                      className="btn-primary" 
+                      style={{ padding: '9px 12px', fontSize: '0.78rem', flexShrink: 0, borderRadius: '4px' }}
+                      onClick={() => {
+                        if (customStoreInput.trim()) {
+                          handleStartRun(customStoreInput.trim());
+                          setCustomStoreInput('');
+                        }
+                      }}
+                    >
+                      + Custom
                     </button>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 4: SPLIT & SETTLE */}
-          {activeTab === 'split' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <div>
-                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Split</h2>
-                  <p style={{ fontSize: '0.78rem', color: '#64748b' }}>Calculate and settle shared balances</p>
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button className="btn-secondary" style={{ padding: '7px 10px', borderRadius: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    onClick={() => setShowOCRModal(true)}>
-                    <Camera size={14} />
-                    Scan
-                  </button>
-                  <button className="btn-primary" style={{ padding: '7px 10px', borderRadius: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    onClick={() => setShowAddExpenseModal(true)}>
-                    <Plus size={14} />
-                    Log
-                  </button>
-                </div>
               </div>
-
-              {/* Debt suggestions widget */}
-              <div className="glass-card" style={{ borderLeft: '3px solid var(--accent-purple)', background: 'rgba(30, 58, 138, 0.02)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <h3 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Optimization suggests</h3>
-                  <button className="btn-primary" style={{ padding: '4px 8px', fontSize: '0.72rem', borderRadius: '6px' }}
-                    onClick={() => setShowSettleModal(true)}>
-                    Settle Up
-                  </button>
-                </div>
-
-                {optimizedDebts.length === 0 ? (
-                  <p style={{ fontSize: '0.8rem', color: '#64748b' }}>No pending balances suggested. You are all settled.</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {optimizedDebts.map((debt, index) => {
-                      const debtor = kompaMembers.find(h => h.id === debt.debtorId)?.name || 'Someone';
-                      const creditor = kompaMembers.find(h => h.id === debt.creditorId)?.name || 'Someone';
-                      return (
-                        <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 500, color: '#1e293b' }}>
-                          <span>{debtor} to {creditor}</span>
-                          <span style={{ fontWeight: 700, color: 'var(--accent-rose)' }}>${debt.amount.toFixed(2)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Expense list history */}
-              <div className="glass-card">
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 800, marginBottom: '10px', color: '#475569' }}>Transaction History</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {expenses.map(exp => (
-                    <div 
-                      key={exp.id} 
-                      style={{
-                        padding: '10px 12px', borderRadius: '8px', 
-                        background: 'rgba(255,255,255,0.4)', border: '1px solid rgba(0,0,0,0.02)',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>{exp.title}</div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px' }}>
-                          Paid by {kompaMembers.find(h => h.id === exp.payerId)?.name} on {exp.date}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>${exp.amount.toFixed(2)}</div>
-                        <span style={{ fontSize: '0.65rem', background: 'rgba(0,0,0,0.03)', padding: '1px 4px', borderRadius: '4px', color: '#64748b', fontWeight: 600 }}>
-                          {exp.splitMethod} split
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Settle Up Action Modal */}
-              {showSettleModal && (
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
-                }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Clear Balances</h3>
-                      <X size={18} className="cursor-pointer" onClick={() => setShowSettleModal(false)} />
-                    </div>
-                    {optimizedDebts.length === 0 ? (
-                      <p style={{ textAlign: 'center', color: '#64748b', padding: '14px 0', fontSize: '0.85rem' }}>No balance to settle.</p>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {optimizedDebts.map((debt, index) => {
-                          const debtor = kompaMembers.find(h => h.id === debt.debtorId);
-                          const creditor = kompaMembers.find(h => h.id === debt.creditorId);
-                          return (
-                            <div 
-                              key={index} 
-                              style={{
-                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                padding: '8px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.01)',
-                                border: '1px solid rgba(0,0,0,0.03)'
-                              }}
-                            >
-                              <div style={{ fontSize: '0.82rem', color: '#334155' }}>
-                                <span style={{ fontWeight: 700 }}>{debtor?.name}</span>
-                                <span style={{ margin: '0 4px', color: '#94a3b8' }}>to</span>
-                                <span style={{ fontWeight: 700 }}>{creditor?.name}</span>
-                              </div>
-                              <button 
-                                className="btn-primary" 
-                                style={{ padding: '5px 10px', fontSize: '0.75rem' }}
-                                onClick={() => handleSettleUp(debt.debtorId, debt.creditorId, debt.amount)}
-                              >
-                                Pay ${debt.amount.toFixed(2)}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* OCR Scanner Modal */}
-              {showOCRModal && (
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
-                }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', maxHeight: '90%', overflowY: 'auto', border: '1px solid rgba(0,0,0,0.06)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>OCR Receipt Scan</h3>
-                      <X size={18} className="cursor-pointer" onClick={() => { setShowOCRModal(false); setOcrResult(null); }} />
-                    </div>
-                    
-                    {!ocrResult ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', textAlign: 'center', padding: '14px 0' }}>
-                        <div style={{
-                          width: '54px', height: '54px', borderRadius: '50%',
-                          background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.04)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>
-                          <Camera size={22} style={{ color: 'var(--accent-purple)' }} />
-                        </div>
-                        {ocrScanning ? (
-                          <div>
-                            <RefreshCw size={20} className="animate-spin" style={{ color: 'var(--accent-purple)', margin: '0 auto 8px' }} />
-                            <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>{ocrProgress}</p>
-                            <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>Executing item classification OCR</p>
-                          </div>
-                        ) : (
-                          <div style={{ width: '100%' }}>
-                            <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>Analyze printed receipts</p>
-                            <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', marginBottom: '12px' }}>Upload a file or choose dummy presets</p>
-                            
-                            <label className="btn-secondary" style={{
-                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                              padding: '10px', cursor: 'pointer', marginBottom: '12px', fontSize: '0.8rem'
-                            }}>
-                              <Upload size={16} />
-                              Upload Receipt Image
-                              <input type="file" accept="image/*" onChange={handleCustomImageOCR} style={{ display: 'none' }} />
-                            </label>
-
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button className="btn-primary" style={{ padding: '8px 12px', fontSize: '0.75rem', flex: 1 }} onClick={() => triggerOCRScan('Costco')}>Scan Costco Preset</button>
-                              <button className="btn-secondary" style={{ padding: '8px 12px', fontSize: '0.75rem', flex: 1 }} onClick={() => triggerOCRScan('Walmart')}>Scan Walmart Preset</button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '8px' }}>
-                          <div>
-                            <h4 style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>{ocrResult.merchant}</h4>
-                            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{ocrResult.date}</span>
-                          </div>
-                          <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>${ocrResult.total.toFixed(2)}</span>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#94a3b8' }}>Identified Items</span>
-                          {ocrResult.items.map((item: any, idx: number) => (
-                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#334155' }}>
-                              <span>{item.name}</span>
-                              <span style={{ fontWeight: 700 }}>${item.price.toFixed(2)}</span>
-                            </div>
-                          ))}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', borderTop: '1px solid rgba(0,0,0,0.03)', paddingTop: '4px' }}>
-                            <span>Associated Tax</span>
-                            <span>${ocrResult.tax.toFixed(2)}</span>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                          <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setOcrResult(null)}>Clear</button>
-                          <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleSaveOCRExpense}>Confirm Split</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Add Manual Expense Modal */}
-              {showAddExpenseModal && (
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                  background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
-                }}>
-                  <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>Record Transaction</h3>
-                      <X size={18} className="cursor-pointer" onClick={() => setShowAddExpenseModal(false)} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Title description</label>
-                        <input type="text" placeholder="e.g. WiFi Bill, Electricity" value={newExpTitle} onChange={e => setNewExpTitle(e.target.value)} style={{ marginTop: '4px' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Total cost ($)</label>
-                        <input type="number" placeholder="0.00" value={newExpAmount} onChange={e => setNewExpAmount(e.target.value)} style={{ marginTop: '4px' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Payer</label>
-                        <select value={newExpPayer} onChange={e => setNewExpPayer(e.target.value)} style={{ marginTop: '4px' }}>
-                          {kompaMembers.map(h => (
-                            <option key={h.id} value={h.id}>{h.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Split Formula</label>
-                        <select value={newExpSplit} onChange={e => setNewExpSplit(e.target.value as any)} style={{ marginTop: '4px' }}>
-                          <option value="equal">Divide Equally</option>
-                          <option value="custom">Divide Custom</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Included Roommates</label>
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                          {kompaMembers.map(h => (
-                            <button
-                              key={h.id}
-                              style={{
-                                padding: '5px 8px', fontSize: '0.72rem', borderRadius: '6px',
-                                border: '1px solid rgba(0,0,0,0.06)',
-                                background: newExpVisibility.includes(h.id) ? 'var(--accent-purple)' : 'rgba(0,0,0,0.02)',
-                                color: newExpVisibility.includes(h.id) ? 'white' : '#475569'
-                              }}
-                              onClick={() => {
-                                if (newExpVisibility.includes(h.id)) {
-                                  setNewExpVisibility(newExpVisibility.filter(id => id !== h.id));
-                                } else {
-                                  setNewExpVisibility([...newExpVisibility, h.id]);
-                                }
-                              }}
-                            >
-                              {h.name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                        <button className="btn-secondary" style={{ flex: 1, padding: '9px' }} onClick={() => setShowAddExpenseModal(false)}>Cancel</button>
-                        <button className="btn-primary" style={{ flex: 1, padding: '9px' }} onClick={handleAddManualExpense}>Add Bill</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-            </div>
-          )}
-
-          {/* TAB 5: CHAT (COLLABORATIVE MESSAGING) */}
-          {activeTab === 'chat' && (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '620px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '8px', marginBottom: '12px' }}>
-                <Users size={16} style={{ color: 'var(--accent-purple)' }} />
-                
-                {/* 4. Active Kompa Specific Chatroom Name */}
-                <div style={{ flex: 1 }}>
-                  <h2 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>{activeKompa?.name} Chatroom</h2>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-emerald)' }}></span>
-                    Double Ratchet Encryption Active
-                  </span>
-                </div>
-
-                {/* 5. Online members initials row */}
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                  {kompaMembers.map(m => (
-                    <div key={m.id} title={m.name}>
-                      {renderInitialsAvatar(m, 26)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Chat messages */}
-              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingRight: '4px' }}>
-                {chatMessages.map(msg => {
-                  const isMe = msg.senderId === currentUserProfile.id;
-                  const isSystem = msg.senderId === 'system';
-                  const sender = kompaMembers.find(h => h.id === msg.senderId);
+            ) : (
+              <div>
+                <div className="glass-card" style={{ borderLeft: '3px solid #191715', padding: '14px', marginBottom: '12px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  {renderRetailerLogo(activeRun.store)}
                   
-                  if (isSystem) {
-                    return (
-                      <div key={msg.id} style={{
-                        alignSelf: 'center', background: 'rgba(0,0,0,0.02)', 
-                        padding: '4px 10px', borderRadius: '10px', border: '1px solid rgba(0,0,0,0.03)',
-                        fontSize: '0.72rem', color: '#64748b', margin: '6px 0', textAlign: 'center', fontWeight: 500
-                      }}>
-                        {msg.text}
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div 
-                      key={msg.id} 
-                      className={`chat-bubble ${isMe ? 'sent' : 'received'}`}
-                    >
-                      {!isMe && (
-                        <div style={{ 
-                          fontSize: '0.68rem', 
-                          fontWeight: 700, 
-                          color: sender?.color || '#1e3a8a',
-                          marginBottom: '2px'
-                        }}>
-                          {sender?.name || 'Roommate'}
-                        </div>
-                      )}
-                      <div>{msg.text}</div>
-                      <span style={{ 
-                        fontSize: '0.62rem', 
-                        color: isMe ? 'rgba(255,255,255,0.6)' : '#94a3b8', 
-                        display: 'block', 
-                        textAlign: 'right',
-                        marginTop: '3px'
-                      }}>
-                        {msg.timestamp}
-                      </span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.7rem', color: '#191715', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      LIVE COLLABORATION ACTIVE
                     </div>
-                  );
-                })}
-                <div ref={chatEndRef} />
-              </div>
-
-              {/* Typing Indicator */}
-              {typingUser && (
-                <div className="typing-indicator">
-                  <div className="typing-dot"></div>
-                  <div className="typing-dot"></div>
-                  <div className="typing-dot"></div>
-                  <span style={{ marginLeft: '4px' }}>{typingUser} is typing...</span>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '2px', color: '#191715', fontFamily: 'var(--font-serif)' }}>
+                      {kompaMembers.find(h => h.id === activeRun.shopperId)?.name}'s {activeRun.store} Run
+                    </h3>
+                  </div>
+                  <span className="run-dot" style={{ background: '#191715' }}></span>
                 </div>
-              )}
 
-              {/* Chat controls */}
-              <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', borderTop: '1px solid rgba(0,0,0,0.04)', paddingTop: '10px', paddingBottom: '20px' }}>
-                <input 
-                  type="text" 
-                  placeholder="Message homemates..." 
-                  value={chatInput} 
-                  onChange={e => handleChatInputChange(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                  style={{ padding: '10px 12px' }}
-                />
-                <button 
-                  className="btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', padding: '10px 12px' }}
-                  onClick={handleSendMessage}
-                >
-                  <Send size={16} />
+                {/* Active Run Requests list */}
+                <div className="glass-card" style={{ padding: '14px' }}>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: 800, marginBottom: '10px', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Run requests</h4>
+                  
+                  {activeRun.requests.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#8c857e', padding: '14px 0', fontSize: '0.8rem' }}>
+                      No items requested. Send request below.
+                    </p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                      {activeRun.requests.map(req => (
+                        <div 
+                          key={req.id} 
+                          style={{
+                            padding: '10px', borderRadius: '6px', 
+                            background: '#ffffff', border: '1px solid rgba(25, 23, 21, 0.06)',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#191715' }}>
+                              {req.itemName}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#8c857e', marginTop: '1px' }}>
+                              Requested by: {kompaMembers.find(h => h.id === req.requesterId)?.name}
+                            </div>
+                          </div>
+                          
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            {req.status === 'pending' || req.status === 'searching' ? (
+                              <>
+                                <button 
+                                  style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'var(--accent-emerald)', color: 'white' }}
+                                  onClick={() => handleUpdateRunRequestStatus(req.id, 'found', 8.50)}
+                                >
+                                  Found
+                                </button>
+                                <button 
+                                  style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'var(--accent-rose)', color: 'white' }}
+                                  onClick={() => handleUpdateRunRequestStatus(req.id, 'replaced', undefined, 'Alternative Item', 7.99)}
+                                >
+                                  Replace
+                                </button>
+                                <button 
+                                  style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(25, 23, 21, 0.05)', color: '#191715' }}
+                                  onClick={() => handleUpdateRunRequestStatus(req.id, 'out')}
+                                >
+                                  Out
+                                </button>
+                              </>
+                            ) : (
+                              <span style={{
+                                fontSize: '0.7rem', fontWeight: 800, padding: '3px 6px', borderRadius: '4px',
+                                background: req.status === 'found' ? 'rgba(16, 185, 129, 0.1)' : req.status === 'replaced' ? 'rgba(180, 83, 9, 0.1)' : 'rgba(220, 38, 38, 0.1)',
+                                color: req.status === 'found' ? '#10b981' : req.status === 'replaced' ? '#b45309' : '#dc2626',
+                                textTransform: 'uppercase'
+                              }}>
+                                {req.status} {req.price && `($${req.price})`}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add new run request */}
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <input 
+                      type="text" 
+                      placeholder="Request item..." 
+                      value={newRequestName} 
+                      onChange={e => setNewRequestName(e.target.value)} 
+                      style={{ padding: '9px' }}
+                    />
+                    <button className="btn-primary" style={{ padding: '0 12px', fontSize: '0.8rem', borderRadius: '4px' }} onClick={handleAddRunRequest}>Request</button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setActiveRun(null)}>Cancel Run</button>
+                  <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleCheckoutRun}>
+                    Complete Checkout
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 4: SPLIT & SETTLE */}
+        {activeTab === 'split' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Split</h2>
+                <p style={{ fontSize: '0.78rem', color: '#8c857e' }}>Calculate and settle shared balances</p>
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button className="btn-secondary" style={{ padding: '7px 10px', borderRadius: '4px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => setShowOCRModal(true)}>
+                  <Camera size={14} />
+                  Scan
+                </button>
+                <button className="btn-primary" style={{ padding: '7px 10px', borderRadius: '4px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => setShowAddExpenseModal(true)}>
+                  <Plus size={14} />
+                  Log
                 </button>
               </div>
             </div>
-          )}
 
-        </main>
+            {/* Debt suggestions widget */}
+            <div className="glass-card" style={{ borderLeft: '3px solid #191715', background: 'rgba(25, 23, 21, 0.02)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <h3 style={{ fontSize: '0.72rem', fontWeight: 800, color: '#8c857e', textTransform: 'uppercase', letterSpacing: '1px' }}>Optimization suggests</h3>
+                <button className="btn-primary" style={{ padding: '4px 8px', fontSize: '0.72rem', borderRadius: '4px' }}
+                  onClick={() => setShowSettleModal(true)}>
+                  Settle Up
+                </button>
+              </div>
 
-        {/* Bottom Tab Bar */}
-        <nav className="bottom-nav">
-          <div className={`nav-item ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>
-            <HomeIcon />
-            <span>Home</span>
-          </div>
-          <div className={`nav-item ${activeTab === 'shelf' ? 'active' : ''}`} onClick={() => setActiveTab('shelf')}>
-            <Package />
-            <span>Shelf</span>
-          </div>
-          <div className={`nav-item ${activeTab === 'run' ? 'active' : ''}`} onClick={() => setActiveTab('run')}>
-            <ShoppingCart />
-            <span>Run</span>
-          </div>
-          <div className={`nav-item ${activeTab === 'split' ? 'active' : ''}`} onClick={() => setActiveTab('split')}>
-            <DollarSign />
-            <span>Split</span>
-          </div>
-          <div 
-            className={`nav-item ${activeTab === 'chat' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('chat')}
-            style={{ position: 'relative' }}
-          >
-            <MessageSquare />
-            <span>Chat</span>
-            {unreadChatCount > 0 && (
-              <span className="unread-badge">
-                {unreadChatCount}
-              </span>
+              {optimizedDebts.length === 0 ? (
+                <p style={{ fontSize: '0.8rem', color: '#8c857e' }}>No pending balances suggested. You are all settled.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {optimizedDebts.map((debt, index) => {
+                    const debtor = kompaMembers.find(h => h.id === debt.debtorId)?.name || 'Someone';
+                    const creditor = kompaMembers.find(h => h.id === debt.creditorId)?.name || 'Someone';
+                    return (
+                      <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 500, color: '#191715' }}>
+                        <span>{debtor} to {creditor}</span>
+                        <span style={{ fontWeight: 700, color: 'var(--accent-rose)' }}>${debt.amount.toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Expense history list */}
+            <div className="glass-card">
+              <h3 style={{ fontSize: '0.9rem', fontWeight: 800, marginBottom: '10px', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Transaction History</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {expenses.map(exp => (
+                  <div 
+                    key={exp.id} 
+                    style={{
+                      padding: '10px 12px', borderRadius: '6px', 
+                      background: '#ffffff', border: '1px solid rgba(25, 23, 21, 0.06)',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#191715' }}>{exp.title}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#8c857e', marginTop: '1px' }}>
+                        Paid by {kompaMembers.find(h => h.id === exp.payerId)?.name} on {exp.date}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#191715' }}>${exp.amount.toFixed(2)}</div>
+                      <span style={{ fontSize: '0.65rem', background: 'rgba(25, 23, 21, 0.05)', padding: '1px 4px', borderRadius: '4px', color: '#191715', fontWeight: 600 }}>
+                        {exp.splitMethod} split
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Settle Up Action Modal */}
+            {showSettleModal && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Clear Balances</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => setShowSettleModal(false)} />
+                  </div>
+                  {optimizedDebts.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#8c857e', padding: '14px 0', fontSize: '0.85rem' }}>No balance to settle.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {optimizedDebts.map((debt, index) => {
+                        const debtor = kompaMembers.find(h => h.id === debt.debtorId);
+                        const creditor = kompaMembers.find(h => h.id === debt.creditorId);
+                        return (
+                          <div 
+                            key={index} 
+                            style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              padding: '8px 10px', borderRadius: '6px', background: '#ffffff',
+                              border: '1px solid rgba(25, 23, 21, 0.06)'
+                            }}
+                          >
+                            <div style={{ fontSize: '0.82rem', color: '#191715' }}>
+                              <span style={{ fontWeight: 700 }}>{debtor?.name}</span>
+                              <span style={{ margin: '0 4px', color: '#8c857e' }}>to</span>
+                              <span style={{ fontWeight: 700 }}>{creditor?.name}</span>
+                            </div>
+                            <button 
+                              className="btn-primary" 
+                              style={{ padding: '5px 10px', fontSize: '0.75rem', borderRadius: '4px' }}
+                              onClick={() => handleSettleUp(debt.debtorId, debt.creditorId, debt.amount)}
+                            >
+                              Pay ${debt.amount.toFixed(2)}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
-          </div>
-        </nav>
 
-      </div>
-    </>
+            {/* OCR Scanner Modal */}
+            {showOCRModal && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', maxHeight: '90%', overflowY: 'auto', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>OCR Receipt Scan</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => { setShowOCRModal(false); setOcrResult(null); }} />
+                  </div>
+                  
+                  {!ocrResult ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', textAlign: 'center', padding: '14px 0' }}>
+                      <div style={{
+                        width: '54px', height: '54px', borderRadius: '50%',
+                        background: 'rgba(25,23,21,0.03)', border: '1px solid rgba(25,23,21,0.06)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      }}>
+                        <Camera size={22} style={{ color: '#191715' }} />
+                      </div>
+                      {ocrScanning ? (
+                        <div>
+                          <RefreshCw size={20} className="animate-spin" style={{ color: '#191715', margin: '0 auto 8px' }} />
+                          <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>{ocrProgress}</p>
+                          <p style={{ fontSize: '0.72rem', color: '#8c857e', marginTop: '2px' }}>Executing item classification OCR</p>
+                        </div>
+                      ) : (
+                        <div style={{ width: '100%' }}>
+                          <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>Analyze printed receipts</p>
+                          <p style={{ fontSize: '0.75rem', color: '#8c857e', marginTop: '2px', marginBottom: '12px' }}>Upload a file or choose dummy presets</p>
+                          
+                          <label className="btn-secondary" style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                            padding: '10px', cursor: 'pointer', marginBottom: '12px', fontSize: '0.8rem', borderRadius: '4px'
+                          }}>
+                            <Upload size={16} />
+                            Upload Receipt Image
+                            <input type="file" accept="image/*" onChange={handleCustomImageOCR} style={{ display: 'none' }} />
+                          </label>
+
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button className="btn-primary" style={{ padding: '8px 12px', fontSize: '0.75rem', flex: 1, borderRadius: '4px' }} onClick={() => triggerOCRScan('Costco')}>Scan Costco Preset</button>
+                            <button className="btn-secondary" style={{ padding: '8px 12px', fontSize: '0.75rem', flex: 1, borderRadius: '4px' }} onClick={() => triggerOCRScan('Walmart')}>Scan Walmart Preset</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(25, 23, 21, 0.06)', paddingBottom: '8px' }}>
+                        <div>
+                          <h4 style={{ fontWeight: 800, fontSize: '0.9rem', color: '#191715' }}>{ocrResult.merchant}</h4>
+                          <span style={{ fontSize: '0.7rem', color: '#8c857e' }}>{ocrResult.date}</span>
+                        </div>
+                        <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>${ocrResult.total.toFixed(2)}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#8c857e' }}>Identified Items</span>
+                        {ocrResult.items.map((item: any, idx: number) => (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#191715' }}>
+                            <span>{item.name}</span>
+                            <span style={{ fontWeight: 700 }}>${item.price.toFixed(2)}</span>
+                          </div>
+                        ))}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#8c857e', borderTop: '1px solid rgba(25,23,21,0.03)', paddingTop: '4px' }}>
+                          <span>Associated Tax</span>
+                          <span>${ocrResult.tax.toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                        <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setOcrResult(null)}>Clear</button>
+                        <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleSaveOCRExpense}>Confirm Split</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Add Manual Expense Modal */}
+            {showAddExpenseModal && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Record Transaction</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => setShowAddExpenseModal(false)} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Title description</label>
+                      <input type="text" placeholder="e.g. WiFi Bill, Electricity" value={newExpTitle} onChange={e => setNewExpTitle(e.target.value)} style={{ marginTop: '4px' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Total cost ($)</label>
+                      <input type="number" placeholder="0.00" value={newExpAmount} onChange={e => setNewExpAmount(e.target.value)} style={{ marginTop: '4px' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Payer</label>
+                      <select value={newExpPayer} onChange={e => setNewExpPayer(e.target.value)} style={{ marginTop: '4px' }}>
+                        {kompaMembers.map(h => (
+                          <option key={h.id} value={h.id}>{h.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Split Formula</label>
+                      <select value={newExpSplit} onChange={e => setNewExpSplit(e.target.value as any)} style={{ marginTop: '4px' }}>
+                        <option value="equal">Divide Equally</option>
+                        <option value="custom">Divide Custom</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Included Roommates</label>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                        {kompaMembers.map(h => (
+                          <button
+                            key={h.id}
+                            style={{
+                              padding: '5px 8px', fontSize: '0.72rem', borderRadius: '4px',
+                              border: '1px solid rgba(25, 23, 21, 0.15)',
+                              background: newExpVisibility.includes(h.id) ? '#191715' : 'transparent',
+                              color: newExpVisibility.includes(h.id) ? 'white' : '#191715'
+                            }}
+                            onClick={() => {
+                              if (newExpVisibility.includes(h.id)) {
+                                setNewExpVisibility(newExpVisibility.filter(id => id !== h.id));
+                              } else {
+                                setNewExpVisibility([...newExpVisibility, h.id]);
+                              }
+                            }}
+                          >
+                            {h.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setShowAddExpenseModal(false)}>Cancel</button>
+                      <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleAddManualExpense}>Add Bill</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* TAB 5: CHAT */}
+        {activeTab === 'chat' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '620px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(25, 23, 21, 0.05)', paddingBottom: '8px', marginBottom: '12px' }}>
+              <Users size={16} style={{ color: '#191715' }} />
+              
+              {/* Active Kompa specific Chatroom Name */}
+              <div style={{ flex: 1 }}>
+                <h2 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#191715' }}>{activeKompa?.name} Chatroom</h2>
+                <span style={{ fontSize: '0.68rem', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-emerald)' }}></span>
+                  Double Ratchet Encryption Active
+                </span>
+              </div>
+
+              {/* Online members initial avatars row */}
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                {kompaMembers.map(m => (
+                  <div key={m.id} title={m.name}>
+                    {renderInitialsAvatar(m, 26)}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Chat messages layout */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingRight: '4px' }}>
+              {chatMessages.map(msg => {
+                const isMe = msg.senderId === currentUserProfile.id;
+                const isSystem = msg.senderId === 'system';
+                const sender = kompaMembers.find(h => h.id === msg.senderId);
+                
+                if (isSystem) {
+                  return (
+                    <div key={msg.id} style={{
+                      alignSelf: 'center', background: 'rgba(25,23,21,0.03)', 
+                      padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(25,23,21,0.04)',
+                      fontSize: '0.72rem', color: '#8c857e', margin: '6px 0', textAlign: 'center', fontWeight: 500
+                    }}>
+                      {msg.text}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div 
+                    key={msg.id} 
+                    className={`chat-bubble ${isMe ? 'sent' : 'received'}`}
+                    style={{
+                      background: isMe ? '#191715' : '#ffffff',
+                      color: isMe ? '#ffffff' : '#191715',
+                      border: isMe ? '1px solid #191715' : '1px solid rgba(25, 23, 21, 0.08)',
+                      borderRadius: '12px',
+                      padding: '8px 12px',
+                      maxWidth: '80%',
+                      alignSelf: isMe ? 'flex-end' : 'flex-start',
+                      marginBottom: '8px',
+                      boxShadow: 'none'
+                    }}
+                  >
+                    {!isMe && (
+                      <div style={{ 
+                        fontSize: '0.68rem', 
+                        fontWeight: 750, 
+                        color: '#191715',
+                        marginBottom: '2px'
+                      }}>
+                        {sender?.name || 'Roommate'}
+                      </div>
+                    )}
+                    <div>{msg.text}</div>
+                    <span style={{ 
+                      fontSize: '0.62rem', 
+                      color: isMe ? 'rgba(255,255,255,0.6)' : '#8c857e', 
+                      display: 'block', 
+                      textAlign: 'right',
+                      marginTop: '3px'
+                    }}>
+                      {msg.timestamp}
+                    </span>
+                  </div>
+                );
+              })}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Typing Indicator dots */}
+            {typingUser && (
+              <div className="typing-indicator">
+                <div className="typing-dot"></div>
+                <div className="typing-dot"></div>
+                <div className="typing-dot"></div>
+                <span style={{ marginLeft: '4px' }}>{typingUser} is typing...</span>
+              </div>
+            )}
+
+            {/* Chat controls */}
+            <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', borderTop: '1px solid rgba(25, 23, 21, 0.05)', paddingTop: '10px', paddingBottom: '20px' }}>
+              <input 
+                type="text" 
+                placeholder="Message homemates..." 
+                value={chatInput} 
+                onChange={e => handleChatInputChange(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
+                style={{ padding: '10px 12px' }}
+              />
+              <button 
+                className="btn-primary" 
+                style={{ display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', padding: '10px 12px', borderRadius: '4px' }}
+                onClick={handleSendMessage}
+              >
+                <Send size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+
+      </main>
+
+      {/* Bottom Nav Bar */}
+      <nav className="bottom-nav">
+        <div className={`nav-item ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>
+          <HomeIcon />
+          <span>Home</span>
+        </div>
+        <div className={`nav-item ${activeTab === 'shelf' ? 'active' : ''}`} onClick={() => setActiveTab('shelf')}>
+          <Package />
+          <span>Shelf</span>
+        </div>
+        <div className={`nav-item ${activeTab === 'run' ? 'active' : ''}`} onClick={() => setActiveTab('run')}>
+          <ShoppingCart />
+          <span>Run</span>
+        </div>
+        <div className={`nav-item ${activeTab === 'split' ? 'active' : ''}`} onClick={() => setActiveTab('split')}>
+          <DollarSign />
+          <span>Split</span>
+        </div>
+        <div 
+          className={`nav-item ${activeTab === 'chat' ? 'active' : ''}`} 
+          onClick={() => setActiveTab('chat')}
+          style={{ position: 'relative' }}
+        >
+          <MessageSquare />
+          <span>Chat</span>
+          {unreadChatCount > 0 && (
+            <span className="unread-badge" style={{ background: '#dc2626', color: '#ffffff' }}>
+              {unreadChatCount}
+            </span>
+          )}
+        </div>
+      </nav>
+
+    </div>
   );
 }

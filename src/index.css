@@ -1,39 +1,41 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@1,600;1,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap');
 
 :root {
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light;
-  color: #1a1e29;
-  background-color: #f5f7fa;
+  color: #191715;
+  background-color: #fbfbfa;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* Royal & Majestic Glassmorphism Variables */
-  --bg-gradient: radial-gradient(125% 125% at 50% 10%, #f4f6f9 30%, #e5e9f0 100%);
-  --glass-bg: rgba(255, 255, 255, 0.65);
-  --glass-bg-hover: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(30, 58, 138, 0.05);
-  --glass-border-focus: rgba(30, 58, 138, 0.25);
-  --glass-shadow: 0 10px 30px -10px rgba(30, 58, 138, 0.05), 0 1px 3px rgba(30, 58, 138, 0.02);
-  --glass-blur: blur(20px);
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: 'Inter', -apple-system, sans-serif;
 
-  /* Curated Majestic Palette */
-  --accent-purple: #1e3a8a; /* Royal Navy */
-  --accent-purple-glow: rgba(30, 58, 138, 0.12);
-  --accent-blue: #2563eb; /* Royal Blue */
-  --accent-blue-glow: rgba(37, 99, 235, 0.12);
-  --accent-emerald: #047857; /* Forest Green */
-  --accent-emerald-glow: rgba(4, 120, 87, 0.12);
-  --accent-rose: #b91c1c; /* Crimson Red */
-  --accent-rose-glow: rgba(185, 28, 28, 0.12);
-  --accent-amber: #b45309; /* Antique Gold */
-  --accent-amber-glow: rgba(180, 83, 9, 0.12);
+  --bg-gradient: #fbfbfa;
+  --glass-bg: #ffffff;
+  --glass-bg-hover: #ffffff;
+  --glass-border: rgba(25, 23, 21, 0.08);
+  --glass-border-focus: rgba(25, 23, 21, 0.3);
+  --glass-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.02);
+  --glass-blur: blur(8px);
+
+  /* Curated Phia Palette */
+  --accent-purple: #7c3aed;
+  --accent-purple-glow: rgba(124, 58, 237, 0.1);
+  --accent-blue: #2563eb;
+  --accent-blue-glow: rgba(37, 99, 235, 0.1);
+  --accent-emerald: #10b981;
+  --accent-emerald-glow: rgba(16, 185, 129, 0.1);
+  --accent-rose: #dc2626;
+  --accent-rose-glow: rgba(220, 38, 38, 0.1);
+  --accent-amber: #b45309;
+  --accent-amber-glow: rgba(180, 83, 9, 0.1);
 }
 
 * {
@@ -112,10 +114,10 @@ body {
 
 /* Header typography */
 h1, h2, h3, h4, h5, h6, .brand-title {
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-serif);
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: #0f172a;
+  color: #191715;
 }
 
 /* Device Shell Layout (Mobile Mockup in Center on Desktop) */
@@ -238,21 +240,20 @@ h1, h2, h3, h4, h5, h6, .brand-title {
 
 /* Glass Card - Sleek Figma Design */
 .glass-card {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: #ffffff;
+  border: 1px solid rgba(25, 23, 21, 0.06);
   border-radius: 16px;
   padding: 16px;
   margin-bottom: 16px;
-  backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow);
+  box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.02);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card:hover {
-  border-color: rgba(30, 58, 138, 0.15);
-  background: var(--glass-bg-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 12px 35px -10px rgba(30, 58, 138, 0.06), 0 2px 5px rgba(0, 0, 0, 0.01);
+  border-color: rgba(25, 23, 21, 0.15);
+  background: #ffffff;
+  transform: none;
+  box-shadow: 0 8px 30px -5px rgba(0, 0, 0, 0.04);
 }
 
 /* Figma style custom avatars */
@@ -375,11 +376,11 @@ h1, h2, h3, h4, h5, h6, .brand-title {
 }
 
 .nav-item:hover {
-  color: #1e3a8a;
+  color: #191715;
 }
 
 .nav-item.active {
-  color: #2563eb;
+  color: #191715;
 }
 
 .nav-item svg {
@@ -396,11 +397,11 @@ h1, h2, h3, h4, h5, h6, .brand-title {
 input, select, textarea {
   width: 100%;
   padding: 11px 14px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(30, 58, 138, 0.1);
-  border-radius: 10px;
-  color: #1e293b;
-  font-family: inherit;
+  background: #ffffff;
+  border: 1px solid rgba(25, 23, 21, 0.15);
+  border-radius: 6px;
+  color: #191715;
+  font-family: var(--font-sans);
   font-size: 0.9rem;
   outline: none;
   transition: all 0.2s ease;
@@ -408,43 +409,45 @@ input, select, textarea {
 
 input:focus, select:focus, textarea:focus {
   background: #ffffff;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: #191715;
+  box-shadow: 0 0 0 2px rgba(25, 23, 21, 0.05);
 }
 
 button {
   cursor: pointer;
-  font-family: inherit;
+  font-family: var(--font-sans);
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: 6px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   outline: none;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  background: #191715;
   color: white;
-  border: none;
+  border: 1px solid #191715;
   padding: 11px 18px;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+  box-shadow: none;
+  font-weight: 700;
 }
 
 .btn-primary:hover {
-  transform: translateY(-0.5px);
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
-  background: linear-gradient(135deg, #2563eb 0%, #1e3a8a 100%);
+  background: #2d2a27;
+  border-color: #2d2a27;
+  transform: none;
+  box-shadow: none;
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(30, 58, 138, 0.12);
-  color: #1e3a8a;
+  background: transparent;
+  border: 1px solid rgba(25, 23, 21, 0.15);
+  color: #191715;
   padding: 11px 18px;
 }
 
 .btn-secondary:hover {
-  background: rgba(30, 58, 138, 0.05);
-  border-color: #1e3a8a;
+  background: rgba(25, 23, 21, 0.03);
+  border-color: #191715;
 }
 
 /* Run Activity Pulse Dot */
@@ -677,17 +680,98 @@ button {
 .persona-btn {
   padding: 8px 14px;
   font-size: 0.8rem;
-  border-radius: 8px;
-  border: 1px solid rgba(30, 58, 138, 0.08);
-  background: rgba(255, 255, 255, 0.7);
-  color: #475569;
+  border-radius: 6px;
+  border: 1px solid rgba(25, 23, 21, 0.12);
+  background: transparent;
+  color: #5e5954;
   font-weight: 600;
   transition: all 0.2s ease;
 }
 
 .persona-btn.active {
-  background: #1e3a8a;
+  background: #191715;
   color: white;
-  border-color: #1e3a8a;
+  border-color: #191715;
 }
+
+.caption-badge {
+  background: rgba(25, 23, 21, 0.04);
+  color: #191715;
+  border: 1px solid rgba(25, 23, 21, 0.08);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.caption-badge i {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: #191715;
+}
+
+/* Phia Polaroid Collage Cards */
+.phia-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 10px 0;
+}
+
+.phia-polaroid-card {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 12px;
+  box-shadow: 0 12px 35px -10px rgba(0, 0, 0, 0.08), 0 2px 8px -2px rgba(0, 0, 0, 0.02);
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s ease;
+  cursor: pointer;
+  border: 1px solid rgba(25, 23, 21, 0.04);
+}
+
+.phia-polaroid-card:hover {
+  transform: scale(1.02) rotate(0deg) !important;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.12);
+}
+
+.phia-collage-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 4px;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f3f2ee;
+  margin-bottom: 10px;
+}
+
+.phia-collage-image {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eae9e5;
+  color: #191715;
+  font-size: 1.25rem;
+}
+
+.phia-polaroid-title {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #191715;
+}
+
+.phia-polaroid-count {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  color: #8c857e;
+  margin-top: 1px;
+}
+
 
