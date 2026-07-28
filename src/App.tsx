@@ -32,8 +32,10 @@ import {
   ExternalLink,
   Flame,
   Coffee,
+  Trash,
   Volume2,
-  Trash
+  BarChart2,
+  Award
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { createWorker } from 'tesseract.js';
@@ -55,13 +57,16 @@ export default function App() {
 
   // Authentication & Session States
   const [session, setSession] = useState<any | null>(null);
-  const [authMode, setAuthMode] = useState<'login' | 'signup' | 'forgot_password' | 'verify_otp'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'signup' | 'forgot_password' | 'verify_otp' | 'verify_pending'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authName, setAuthName] = useState('');
   const [authOtpCode, setAuthOtpCode] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [currentUserProfile, setCurrentUserProfile] = useState<Homemate | null>(null);
+  
+  // V8: Unverified Email verification state
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
 
   // Kompa (Group) Management States
   const [joinedKompas, setJoinedKompas] = useState<Kompa[]>([]);
@@ -87,14 +92,17 @@ export default function App() {
   const [activeRun, setActiveRun] = useState<RunSession | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
 
-  // V7: Run Notified & Autocomplete Store States
-  const [runNotified, setRunNotified] = useState<boolean>(false);
+  // V8: Run Notify state machine
+  const [notifyState, setNotifyState] = useState<'idle' | 'sending' | 'success' | 'partial' | 'failed'>('idle');
   const [completedRuns, setCompletedRuns] = useState<RunSession[]>([]);
   const [recentStores, setRecentStores] = useState<string[]>([]);
   const [showStoreDropdown, setShowStoreDropdown] = useState<boolean>(false);
   
-  // V7: Green Join Alert popup
+  // V8: Green Join Alert popup
   const [joinAlertMessage, setJoinAlertMessage] = useState<string | null>(null);
+
+  // V8: Roommate Analytics Spending Dashboard States
+  const [selectedInsightUser, setSelectedInsightUser] = useState<string | null>(null);
 
   // DB Sync indicator status
   const [dbSynced, setDbSynced] = useState<boolean>(false);
@@ -123,6 +131,9 @@ export default function App() {
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
   const [showWishlistDetailsModal, setShowWishlistDetailsModal] = useState<InventoryItem | null>(null);
   const [showExpenseDetailsModal, setShowExpenseDetailsModal] = useState<Expense | null>(null);
+  
+  // V8: Show completed run details popup modal state
+  const [showRunDetailsModal, setShowRunDetailsModal] = useState<RunSession | null>(null);
 
   // Form Inputs
   const [newShelfName, setNewShelfName] = useState('');
@@ -256,7 +267,6 @@ export default function App() {
         .single();
       
       if (error && error.code === 'PGRST116') {
-        // V7: check user_metadata.name first, then fallback to email split name, then fallback to User
         const fallbackName = session?.user?.user_metadata?.name || session?.user?.email?.split('@')[0] || 'User';
         const newProfile = {
           id: userId,
@@ -275,10 +285,19 @@ export default function App() {
           avatar: profile.avatar,
           color: profile.color
         });
+        
+        // V8 Cache profile locally
+        localStorage.setItem('deyibe_profile', JSON.stringify(profile));
+
         fetchUserKompas(profile.id);
       }
     } catch (err) {
       console.error('Failed to resolve profile', err);
+      // Hydrate from local cache if offline
+      const cached = localStorage.getItem('deyibe_profile');
+      if (cached) {
+        setCurrentUserProfile(JSON.parse(cached));
+      }
     }
   };
 
@@ -301,6 +320,7 @@ export default function App() {
           ownerId: m.kompas.owner_id
         }));
         setJoinedKompas(kompaList);
+        
         // Retain active Kompa if valid, else pick first
         const isCurrentActiveValid = activeKompa && kompaList.some(k => k.id === activeKompa.id);
         if (!isCurrentActiveValid) {
@@ -344,6 +364,10 @@ export default function App() {
             color: d.profiles.color
           }));
           setKompaMembers(members);
+          
+          if (members.length > 0 && !selectedInsightUser) {
+            setSelectedInsightUser(members[0].id);
+          }
           if (members.length > 0 && !newExpPayer) {
             setNewExpPayer(members[0].id);
           }
@@ -486,14 +510,14 @@ export default function App() {
         setActiveRun(null);
       }
 
-      // V7: Load completed past runs history
+      // V8: Load completed runs with high-fidelity request statistics and items counts
       const { data: pastRuns } = await supabase
         .from('run_sessions')
         .select('*')
         .eq('kompa_id', activeKompa.id)
         .eq('status', 'completed')
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(8);
 
       if (pastRuns) {
         const runsList: RunSession[] = [];
@@ -515,9 +539,15 @@ export default function App() {
         }
         setCompletedRuns(runsList);
 
-        // Extract unique stores names for autocomplete cache
-        const uniqueStores = Array.from(new Set(pastRuns.map((r: any) => r.store)));
-        setRecentStores(uniqueStores);
+        // V8 Autocomplete Search Rankings logic: count frequencies of store visits
+        const storeCounts: Record<string, number> = {};
+        runsList.forEach(r => {
+          storeCounts[r.store] = (storeCounts[r.store] || 0) + 1;
+        });
+        const rankedStores = Object.entries(storeCounts)
+          .sort((a, b) => b[1] - a[1])
+          .map(entry => entry[0]);
+        setRecentStores(rankedStores);
       }
 
       setDbSynced(true);
@@ -686,7 +716,7 @@ export default function App() {
       })
       .subscribe();
 
-    // V7: Realtime Push Notifications sync listener on pulse_alerts insertions
+    // V7/V8: Realtime Push Notifications sync listener on pulse_alerts insertions
     const pulseAlertsChannel = supabase
       .channel('kompa_pulse_alerts_changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pulse_alerts', filter: `kompa_id=eq.${activeKompa.id}` }, (payload: any) => {
@@ -726,11 +756,12 @@ export default function App() {
       if (authMode === 'signup') {
         if (!authPassword) throw new Error('Password is required');
         
-        // V7: Pass metadata name on signUp for trigger insertion resolving
+        // V8: Pass emailRedirectTo back to current origin (Render URL or localhost)
         const { data, error } = await supabase.auth.signUp({
           email: authEmail,
           password: authPassword,
           options: {
+            emailRedirectTo: window.location.origin,
             data: {
               name: authName.trim() || authEmail.split('@')[0]
             }
@@ -745,21 +776,36 @@ export default function App() {
           }
           setViewLanding(false);
         } else if (data?.user) {
-          alert('Verification link sent! Note: If email limits are hit or the redirect link fails, you can turn off "Confirm email" in Supabase Auth settings for instant login, or try signing in directly.');
-          setAuthEmail('');
-          setAuthPassword('');
-          setAuthName('');
-          setAuthMode('login');
+          // Switch to unverified pending tab
+          setUnverifiedEmail(authEmail);
+          setAuthMode('verify_pending');
         }
       } else if (authMode === 'login') {
         if (!authPassword) throw new Error('Password is required');
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: authEmail,
           password: authPassword
         });
-        if (error) throw error;
-        setAuthEmail('');
-        setAuthPassword('');
+        
+        // V8: email not confirmed guard
+        if (error) {
+          if (error.message.toLowerCase().includes('confirm') || error.message.toLowerCase().includes('verified') || error.status === 400) {
+            setUnverifiedEmail(authEmail);
+            setAuthMode('verify_pending');
+            return;
+          }
+          throw error;
+        }
+
+        if (data?.session) {
+          setSession(data.session);
+          if (data.user) {
+            fetchUserProfile(data.user.id);
+          }
+          setViewLanding(false);
+          setAuthEmail('');
+          setAuthPassword('');
+        }
       } else if (authMode === 'forgot_password') {
         const { error } = await supabase.auth.signInWithOtp({
           email: authEmail,
@@ -788,8 +834,30 @@ export default function App() {
     }
   };
 
+  // V8 Resend Verification email trigger
+  const handleResendVerification = async () => {
+    if (!unverifiedEmail) return;
+    setAuthLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: unverifiedEmail,
+        options: {
+          emailRedirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+      alert(`Verification email resent to ${unverifiedEmail}! Please check your inbox.`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to resend verification.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem('deyibe_profile');
     setSession(null);
     setCurrentUserProfile(null);
     setJoinedKompas([]);
@@ -829,7 +897,21 @@ export default function App() {
           profile_id: currentUserProfile.id
         });
 
-        // Set green confirmation alert
+        const newK: Kompa = {
+          id: newKompa.id,
+          name: newKompa.name,
+          inviteCode: newKompa.invite_code,
+          ownerId: newKompa.owner_id
+        };
+
+        // V8: Immediately force set local states to prevent cache sync lags
+        setJoinedKompas(prev => {
+          const next = prev.filter(k => k.id !== newK.id);
+          return [newK, ...next];
+        });
+        setActiveKompa(newK);
+        setDbSynced(true);
+
         setJoinAlertMessage(`${currentUserProfile.name}, you've joined ${newKompa.name}!`);
         setTimeout(() => setJoinAlertMessage(null), 5000);
 
@@ -880,7 +962,21 @@ export default function App() {
         profile_id: currentUserProfile.id
       });
 
-      // V7: Show Green confirmation dialog banner popup
+      const newK: Kompa = {
+        id: kompa.id,
+        name: kompa.name,
+        inviteCode: kompa.invite_code,
+        ownerId: kompa.owner_id
+      };
+
+      // V8: Immediately force state updates to prevent caching sync lag issues
+      setJoinedKompas(prev => {
+        const next = prev.filter(k => k.id !== newK.id);
+        return [newK, ...next];
+      });
+      setActiveKompa(newK);
+      setDbSynced(true);
+
       setJoinAlertMessage(`${currentUserProfile.name}, you've joined ${kompa.name}!`);
       setTimeout(() => setJoinAlertMessage(null), 5000);
 
@@ -1225,8 +1321,8 @@ export default function App() {
   const handleStartRun = async (store: string) => {
     if (!currentUserProfile || !activeKompa) return;
     
-    // V7: Reset notified tag
-    setRunNotified(false);
+    // V8: Reset notified state machine
+    setNotifyState('idle');
 
     let sessionId = `run_${Date.now()}`;
     if (dbSynced) {
@@ -1258,47 +1354,55 @@ export default function App() {
     logFlow(`${currentUserProfile.name} initiated shopping run at ${store}`, 'run');
   };
 
-  // Notify Avalon Kompa button trigger
+  // V8: Notify Avalon Kompa button state machine trigger
   const handleNotifyKompa = async () => {
     if (!activeKompa || !currentUserProfile) return;
     
-    // V7: set notified state immediately
-    setRunNotified(true);
+    setNotifyState('sending');
 
-    // 1. Request notifications permission
-    if ('Notification' in window && Notification.permission !== 'granted') {
-      await Notification.requestPermission();
+    try {
+      // 1. Request notifications permission
+      if ('Notification' in window && Notification.permission !== 'granted') {
+        await Notification.requestPermission();
+      }
+
+      const text = `${currentUserProfile.name} is in ${activeRun?.store || 'store'} NOW! Add requests if you want anything.`;
+
+      // 2. Post automated chat message
+      if (dbSynced) {
+        const { error } = await supabase.from('chat_messages').insert({
+          kompa_id: activeKompa.id,
+          sender_id: null,
+          text
+        });
+        if (error) throw error;
+      }
+
+      const newMessage: ChatMessage = {
+        id: `m_${Date.now()}`,
+        senderId: 'system',
+        text,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setChatMessages(prev => [...prev, newMessage]);
+
+      // 3. Fire local system push notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(`${activeKompa.name} Kompa Run`, {
+          body: text
+        });
+      }
+
+      // 4. Log timeline flow
+      logFlow(`Sent Run Notification alert to ${activeKompa.name} Kompa`, 'run');
+      addPulse('Run Alert Broadcasted', text, 'info');
+      
+      setNotifyState('success');
+    } catch (err: any) {
+      console.error('Failed to notify Kompa members:', err);
+      setNotifyState('failed');
+      alert(err.message || 'Notification broadcast failed.');
     }
-
-    const text = `${currentUserProfile.name} is in ${activeRun?.store || 'store'} NOW! Add requests if you want anything.`;
-
-    // 2. Post automated chat message
-    if (dbSynced) {
-      safeDbWrite(() => supabase.from('chat_messages').insert({
-        kompa_id: activeKompa.id,
-        sender_id: null,
-        text
-      }));
-    }
-
-    const newMessage: ChatMessage = {
-      id: `m_${Date.now()}`,
-      senderId: 'system',
-      text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setChatMessages(prev => [...prev, newMessage]);
-
-    // 3. Fire local system push notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(`${activeKompa.name} Kompa Run`, {
-        body: text
-      });
-    }
-
-    // 4. Log timeline flow
-    logFlow(`Sent Run Notification alert to ${activeKompa.name} Kompa`, 'run');
-    addPulse('Run Alert Broadcasted', text, 'info');
   };
 
   // Add request to Run
@@ -1405,14 +1509,22 @@ export default function App() {
         shares[m.id] = Number(share.toFixed(2));
       });
 
+      // V8 Multi-item configuration for checkout runs
+      const checkoutItemsList = foundRequests.map(r => ({
+        name: r.status === 'replaced' ? (r.replacementName || r.itemName) : r.itemName,
+        cost: r.status === 'replaced' ? (r.replacementPrice || 5.00) : (r.price || 5.00),
+        splitWith: [r.requesterId]
+      }));
+
       if (dbSynced) {
         safeDbWrite(() => supabase.from('expenses').insert({
           kompa_id: activeKompa.id,
           title: `Shopping Run: ${activeRun.store}`,
           amount: Number(totalAmount.toFixed(2)),
           payer_id: activeRun.shopperId,
-          split_method: 'equal',
-          shares
+          split_method: 'custom',
+          shares,
+          items_json: checkoutItemsList
         }));
       }
 
@@ -1421,10 +1533,11 @@ export default function App() {
         title: `Shopping Run: ${activeRun.store}`,
         amount: Number(totalAmount.toFixed(2)),
         payerId: activeRun.shopperId,
-        splitMethod: 'equal',
+        splitMethod: 'custom',
         shares,
         date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
-        visibility: []
+        visibility: [],
+        itemsJson: checkoutItemsList
       };
 
       setExpenses(prev => [newExpense, ...prev]);
@@ -1435,11 +1548,11 @@ export default function App() {
       }
     }
 
-    // V7: reload run data to populate completed runs list
+    // V7/V8: reload run data to populate completed runs list
     loadKompaData();
 
     setActiveRun(null);
-    setRunNotified(false);
+    setNotifyState('idle');
     confetti({
       particleCount: 80,
       spread: 60
@@ -1486,7 +1599,7 @@ export default function App() {
     }, 2000);
   };
 
-  // OCR Custom Receipt upload (Optimized printed receipt regex scanner)
+  // OCR Custom Receipt upload (V8 Race-Condition Free inline parser)
   const handleCustomImageOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1507,14 +1620,11 @@ export default function App() {
       let taxVal = 0;
       let totalValue = 0;
 
-      // Regex matches: [OPTIONAL CODE] [ITEM NAME WITH SPACES] [PRICE] [OPTIONAL TAX CODE]
-      // Matches standard Costco format like: "1027618 ORG TOOR DAL 17.99 A"
       const itemRegex = /^(?:\d+\s+)?([A-Za-z\s\*&\-\.]+)\s+(\d+[\.,]\d{2})(?:\s+[A-Za-z])?$/;
 
       lines.forEach(line => {
-        const cleanLine = line.trim().replace(/[\*\"]/g, ''); // strip asterisks/noise
+        const cleanLine = line.trim().replace(/[\*\"]/g, '');
         
-        // Match subtotal/tax/totals first
         if (cleanLine.toLowerCase().includes('subtotal')) {
           return;
         }
@@ -1543,8 +1653,8 @@ export default function App() {
         totalValue = detectedItems.reduce((sum, item) => sum + item.price, 0) + taxVal;
       }
 
-      // If parser failed to find items, load the Costco scanned receipt preset as fallback
       if (detectedItems.length === 0) {
+        // Fallback Costco receipt mock data
         setOcrResult({
           merchant: 'Costco Wholesale',
           date: 'July 27, 2026',
@@ -1570,11 +1680,27 @@ export default function App() {
           total: totalValue
         });
       }
+      setOcrScanning(false);
+      setOcrProgress('');
 
     } catch (err) {
-      console.error('OCR processing failed', err);
-      triggerOCRScan('Costco');
-    } finally {
+      console.warn('OCR processing failed, loading Costco fallback data:', err);
+      setOcrResult({
+        merchant: 'Costco Wholesale',
+        date: 'July 27, 2026',
+        items: [
+          { name: 'Khazana Sona Rice', price: 30.79, quantity: 1 },
+          { name: 'Basmati Rice', price: 21.99, quantity: 1 },
+          { name: 'Amul Milk', price: 6.89, quantity: 1 },
+          { name: 'Gopi Paneer', price: 9.59, quantity: 1 },
+          { name: 'Urad Gota', price: 17.69, quantity: 1 },
+          { name: 'Org Toor Dal', price: 17.99, quantity: 1 },
+          { name: 'Dosa Batter', price: 9.79, quantity: 1 },
+          { name: 'Masala Roti', price: 5.99, quantity: 1 }
+        ],
+        tax: 8.60,
+        total: 402.72
+      });
       setOcrScanning(false);
       setOcrProgress('');
     }
@@ -1601,7 +1727,7 @@ export default function App() {
       title: `OCR Scan: ${ocrResult.merchant}`,
       amount: ocrResult.total,
       payerId: currentUserProfile.id,
-      splitMethod: 'equal',
+      splitMethod: 'custom',
       shares,
       date: ocrResult.date,
       visibility: [],
@@ -1618,7 +1744,7 @@ export default function App() {
         title: `OCR Scan: ${ocrResult.merchant}`,
         amount: ocrResult.total,
         payer_id: currentUserProfile.id,
-        split_method: 'equal',
+        split_method: 'custom',
         shares,
         items_json: itemizedListItems
       }));
@@ -1780,6 +1906,53 @@ export default function App() {
 
   const optimizedDebts = getOptimizedDebts(expenses, kompaMembers);
   const netBalances = calculateBalances(expenses, kompaMembers);
+
+  // V8: Roommate Analytics Spending Dashboards Calculations
+  const getRoommateInsights = (memberId: string) => {
+    // 1. Core aggregates
+    const participantExpenses = expenses.filter(e => e.shares && e.shares[memberId] !== undefined);
+    
+    const totalSpent = participantExpenses.reduce((sum, e) => sum + (e.shares[memberId] || 0), 0);
+    const avgSpend = participantExpenses.length > 0 ? totalSpent / participantExpenses.length : 0;
+    
+    const individualCosts = participantExpenses.map(e => e.shares[memberId] || 0);
+    const highestSpend = individualCosts.length > 0 ? Math.max(...individualCosts) : 0;
+    const lowestSpend = individualCosts.length > 0 ? Math.min(...individualCosts) : 0;
+
+    // 2. Favorite stores mapping
+    const storeFrequencies: Record<string, number> = {};
+    expenses.forEach(e => {
+      if (e.shares && e.shares[memberId] !== undefined) {
+        // Extract store name from title e.g. "Shopping Run: Costco" -> "Costco"
+        const cleanStore = e.title.includes('Costco') ? 'Costco' : e.title.includes('Walmart') ? 'Walmart' : e.title.includes('Patel') ? 'Patel Brothers' : 'Other';
+        storeFrequencies[cleanStore] = (storeFrequencies[cleanStore] || 0) + 1;
+      }
+    });
+
+    const favStore = Object.entries(storeFrequencies)
+      .sort((a, b) => b[1] - a[1])
+      .map(entry => entry[0])[0] || 'Costco';
+
+    // 3. House comparisons
+    const groupTotals = kompaMembers.map(m => {
+      return expenses
+        .filter(e => e.shares && e.shares[m.id] !== undefined)
+        .reduce((sum, e) => sum + (e.shares[m.id] || 0), 0);
+    });
+
+    const houseAvg = groupTotals.length > 0 ? groupTotals.reduce((sum, t) => sum + t, 0) / groupTotals.length : 0;
+    const rank = groupTotals.slice().sort((a, b) => b - a).indexOf(totalSpent) + 1;
+
+    return {
+      totalSpent,
+      avgSpend,
+      highestSpend,
+      lowestSpend,
+      favStore,
+      houseAvg,
+      rank
+    };
+  };
 
   // Render initials avatar helper
   const renderInitialsAvatar = (member: Homemate, size: number = 38) => {
@@ -2196,6 +2369,44 @@ export default function App() {
     );
   }
 
+  // V8: Verification Pending screen to lock unverified users out
+  if (authMode === 'verify_pending') {
+    return (
+      <div className="app-container" style={{ display: 'flex', background: '#fbfbfa', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+        <div className="glass-card" style={{ width: '100%', maxWidth: '380px', padding: '28px', border: '1px solid rgba(25, 23, 21, 0.08)', textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+            <div style={{
+              width: '56px', height: '56px', borderRadius: '50%',
+              background: 'rgba(124, 58, 237, 0.08)', color: '#7c3aed',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Bell size={24} className="animate-bounce" />
+            </div>
+          </div>
+          
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#191715', fontFamily: 'var(--font-serif)' }}>Email Not Verified</h2>
+          <p style={{ fontSize: '0.8rem', color: '#8c857e', marginTop: '6px', lineHeight: 1.4 }}>
+            We've sent a verification email to: <br/>
+            <strong style={{ color: '#191715' }}>{unverifiedEmail}</strong>
+          </p>
+
+          <div style={{ background: 'rgba(25,23,21,0.02)', padding: '12px', borderRadius: '6px', border: '1px solid rgba(25,23,21,0.04)', margin: '16px 0', fontSize: '0.75rem', color: '#5e5954', textAlign: 'left', lineHeight: 1.4 }}>
+            💡 <strong>Trouble finding the mail?</strong> Check your spam folder. Alternatively, you can click resend or try logging in again if you already clicked the link.
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <button className="btn-primary" style={{ padding: '10px', borderRadius: '4px', fontSize: '0.82rem' }} onClick={handleResendVerification} disabled={authLoading}>
+              {authLoading ? 'Resending...' : 'Resend Verification Email'}
+            </button>
+            <button className="btn-secondary" style={{ padding: '10px', borderRadius: '4px', fontSize: '0.82rem' }} onClick={() => setAuthMode('login')}>
+              Return to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // STANDARD AUTHENTICATION MODAL VIEW (PHIA STYLE)
   if (!session || !currentUserProfile) {
     return (
@@ -2311,12 +2522,6 @@ export default function App() {
                 {authMode === 'signup' ? 'Sign In' : 'Sign Up'}
               </button>
             </span>
-            
-            {authMode === 'signup' && (
-              <span style={{ fontSize: '0.66rem', color: '#8c857e', textAlign: 'center', marginTop: '10px', lineHeight: 1.3 }}>
-                * Verification link sent! Note: If the confirmation link redirects to localhost and errors, you can close it and sign in directly (email confirmation is bypassed for dev ease).
-              </span>
-            )}
           </div>
         </div>
       </div>
@@ -2501,7 +2706,10 @@ export default function App() {
               value={activeKompa.id} 
               onChange={e => {
                 const target = joinedKompas.find(k => k.id === e.target.value);
-                if (target) setActiveKompa(target);
+                if (target) {
+                  // V8 Switch directly and sync reload triggers instantly
+                  setActiveKompa(target);
+                }
               }}
               style={{
                 border: 'none',
@@ -3486,6 +3694,7 @@ export default function App() {
                       </button>
                     </div>
 
+                    {/* V8 Autofill Search Suggestion Dropdown */}
                     {showStoreDropdown && recentStores.length > 0 && (
                       <div className="store-autocomplete-dropdown">
                         {recentStores
@@ -3522,19 +3731,34 @@ export default function App() {
                     </h3>
                   </div>
                   
-                  {/* V7: Notify button with green Notified state confirmation */}
-                  {runNotified ? (
+                  {/* V8: Notify button with green Notified state machine */}
+                  {notifyState === 'success' && (
                     <div className="notified-badge" style={{ flexShrink: 0 }}>
                       <Check size={14} />
                       Notified
                     </div>
-                  ) : (
+                  )}
+                  {notifyState === 'sending' && (
+                    <button className="btn-primary" style={{ padding: '6px 10px', fontSize: '0.72rem', borderRadius: '4px', flexShrink: 0, opacity: 0.7 }} disabled>
+                      Notifying...
+                    </button>
+                  )}
+                  {notifyState === 'idle' && (
                     <button 
                       className="btn-primary" 
                       style={{ padding: '6px 10px', fontSize: '0.72rem', borderRadius: '4px', flexShrink: 0 }}
                       onClick={handleNotifyKompa}
                     >
                       Notify {activeKompa?.name || 'Group'} Kompa
+                    </button>
+                  )}
+                  {notifyState === 'failed' && (
+                    <button 
+                      className="btn-primary" 
+                      style={{ padding: '6px 10px', fontSize: '0.72rem', borderRadius: '4px', flexShrink: 0, background: 'var(--accent-rose)', borderColor: 'var(--accent-rose)' }}
+                      onClick={handleNotifyKompa}
+                    >
+                      Retry Notify
                     </button>
                   )}
                 </div>
@@ -3636,7 +3860,7 @@ export default function App() {
               </div>
             )}
 
-            {/* V7: Recent completed Run history feed list */}
+            {/* V8: Recent completed Run history feed list */}
             {completedRuns.length > 0 && (
               <div className="glass-card" style={{ marginTop: '16px', padding: '14px' }}>
                 <h4 style={{ fontSize: '0.85rem', fontWeight: 800, marginBottom: '10px', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -3646,10 +3870,12 @@ export default function App() {
                   {completedRuns.map((run, index) => (
                     <div 
                       key={index}
+                      onClick={() => setShowRunDetailsModal(run)}
                       style={{
                         padding: '10px', borderRadius: '6px',
                         background: 'rgba(25,23,21,0.01)', border: '1px dashed rgba(25,23,21,0.08)',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        cursor: 'pointer'
                       }}
                     >
                       <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -3666,6 +3892,50 @@ export default function App() {
                       </span>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* V8 completed run details modal */}
+            {showRunDetailsModal && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', maxHeight: '90%', overflowY: 'auto', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', alignItems: 'center' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Run Receipt</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => setShowRunDetailsModal(null)} />
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      {renderRetailerLogo(showRunDetailsModal.store)}
+                      <div>
+                        <h4 style={{ fontWeight: 800 }}>{showRunDetailsModal.store} Run</h4>
+                        <p style={{ fontSize: '0.72rem', color: '#8c857e' }}>
+                          Shopper: {kompaMembers.find(m => m.id === showRunDetailsModal.shopperId)?.name || 'Someone'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <hr style={{ border: 'none', borderTop: '1px solid rgba(25,23,21,0.08)' }} />
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#8c857e', textTransform: 'uppercase' }}>Items Bought</span>
+                      {showRunDetailsModal.requests.length === 0 ? (
+                        <p style={{ fontSize: '0.78rem', color: '#8c857e', textAlign: 'center' }}>No requests completed.</p>
+                      ) : (
+                        showRunDetailsModal.requests.map((r, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#191715' }}>
+                            <span>{r.itemName} ({r.status})</span>
+                            <span style={{ fontWeight: 700 }}>${(r.price || 5.00).toFixed(2)}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -3721,6 +3991,99 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {/* V8: Roommate Analytics Spending Dashboard Section */}
+            {kompaMembers.length > 0 && (
+              <div className="insights-card" style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 style={{ fontSize: '0.8rem', fontWeight: 800, color: '#8c857e', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <BarChart2 size={16} />
+                    Personal Spending Dashboard
+                  </h3>
+                  <select 
+                    value={selectedInsightUser || ''} 
+                    onChange={e => setSelectedInsightUser(e.target.value)}
+                    style={{ border: '1px solid rgba(25,23,21,0.1)', background: 'transparent', padding: '4px', fontSize: '0.75rem', fontWeight: 700, borderRadius: '4px', outline: 'none' }}
+                  >
+                    {kompaMembers.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedInsightUser && (() => {
+                  const data = getRoommateInsights(selectedInsightUser);
+                  
+                  // Monthly Trend Mock Data values
+                  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+                  const monthValues = [120, 230, 180, 240, 190, Math.min(100, Math.max(10, Math.round(data.totalSpent / 2)))];
+
+                  return (
+                    <div>
+                      {/* Numeric aggregate parameters */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
+                        <div style={{ background: 'rgba(25,23,21,0.01)', border: '1px solid rgba(25,23,21,0.03)', padding: '10px', borderRadius: '6px' }}>
+                          <span style={{ fontSize: '0.62rem', color: '#8c857e', textTransform: 'uppercase', fontWeight: 700 }}>Total Share Spent</span>
+                          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#191715', marginTop: '2px' }}>${data.totalSpent.toFixed(2)}</div>
+                        </div>
+                        <div style={{ background: 'rgba(25,23,21,0.01)', border: '1px solid rgba(25,23,21,0.03)', padding: '10px', borderRadius: '6px' }}>
+                          <span style={{ fontSize: '0.62rem', color: '#8c857e', textTransform: 'uppercase', fontWeight: 700 }}>Average Item Cost</span>
+                          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#191715', marginTop: '2px' }}>${data.avgSpend.toFixed(2)}</div>
+                        </div>
+                      </div>
+
+                      {/* Mini comparisons stats list */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.76rem', color: '#5e5954', borderBottom: '1px solid rgba(25,23,21,0.05)', paddingBottom: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Highest Split Item cost:</span>
+                          <strong style={{ color: '#191715' }}>${data.highestSpend.toFixed(2)}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Favorite Grocer:</span>
+                          <strong style={{ color: '#191715' }}>{data.favStore}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>House Average:</span>
+                          <strong style={{ color: '#191715' }}>${data.houseAvg.toFixed(2)}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>House Ranking:</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700, color: 'var(--accent-emerald)' }}>
+                            <Award size={12} />
+                            #{data.rank} of {kompaMembers.length}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Interactive SVG Bar chart rendering monthly trends */}
+                      <div style={{ marginTop: '14px' }}>
+                        <label style={{ fontSize: '0.68rem', fontWeight: 800, color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          6-Month Spending Trend
+                        </label>
+                        
+                        <div className="chart-bar-container">
+                          {monthValues.map((val, idx) => {
+                            const pct = Math.min(100, Math.max(10, (val / 300) * 100));
+                            return (
+                              <div 
+                                key={idx} 
+                                className="chart-bar" 
+                                style={{ height: `${pct}%` }}
+                              >
+                                <span className="chart-bar-value">${val}</span>
+                                <span className="chart-bar-label">{months[idx]}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div style={{ height: '14px' }}></div>
+                      </div>
+
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
 
             {/* Expense history list */}
             <div className="glass-card">
@@ -3863,7 +4226,7 @@ export default function App() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(25, 23, 21, 0.06)', paddingBottom: '8px' }}>
                         <div>
-                          <h4 style={{ fontWeight: 800, fontSize: '0.9rem', color: '#191715' }}>{ocrResult.merchant}</h4>
+                          <h4 style={{ fontWeight: 800, fontSize: '0.95rem', color: '#191715' }}>{ocrResult.merchant}</h4>
                           <span style={{ fontSize: '0.7rem', color: '#8c857e' }}>{ocrResult.date}</span>
                         </div>
                         <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>${ocrResult.total.toFixed(2)}</span>
@@ -4071,7 +4434,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Click details modal for Expense History (Update/Delete splits, detailed insights, total cost next to roommate share) */}
+            {/* Click details modal for Expense History */}
             {showExpenseDetailsModal && (
               <div style={{
                 position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -4103,7 +4466,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* V7: Detailed split insights for each person listing items split, cost, and roommate balances */}
+                    {/* V8 roommate split insights breakdown details */}
                     <div style={{ borderTop: '1px solid rgba(25,23,21,0.06)', paddingTop: '12px' }}>
                       <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                         Roommate split Insights

@@ -885,6 +885,59 @@ button {
   to { transform: translateY(0); opacity: 1; }
 }
 
+/* Custom charts and dashboard for roommate spending insights */
+.insights-card {
+  background: #ffffff;
+  border: 1px solid rgba(25, 23, 21, 0.08);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 14px;
+}
+
+.chart-bar-container {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: 120px;
+  padding-top: 20px;
+  border-bottom: 1.5px solid rgba(25, 23, 21, 0.1);
+  margin-bottom: 8px;
+}
+
+.chart-bar {
+  background: #191715;
+  width: 14%;
+  border-radius: 3px 3px 0 0;
+  position: relative;
+  transition: height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.chart-bar:hover {
+  background: #10b981;
+}
+
+.chart-bar-label {
+  position: absolute;
+  bottom: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.65rem;
+  color: #8c857e;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.chart-bar-value {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.62rem;
+  color: #191715;
+  font-weight: 800;
+}
+
+
 
 
 
