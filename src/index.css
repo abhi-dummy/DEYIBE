@@ -123,7 +123,7 @@ h1, h2, h3, h4, h5, h6, .brand-title {
   position: relative;
   z-index: 1;
   max-width: 480px;
-  min-height: 100vh;
+  height: 100vh;
   margin: 0 auto;
   background: rgba(255, 255, 255, 0.45);
   border-left: 1px solid rgba(0, 0, 0, 0.05);
@@ -132,6 +132,7 @@ h1, h2, h3, h4, h5, h6, .brand-title {
   display: flex;
   flex-direction: column;
   box-shadow: 0 10px 50px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
 }
 
 @media (min-width: 481px) {
@@ -139,11 +140,9 @@ h1, h2, h3, h4, h5, h6, .brand-title {
     background-color: #f1f5f9;
   }
   .app-container {
-    min-height: 92vh;
     margin: 4vh auto;
     border-radius: 32px;
     border: 1px solid rgba(0, 0, 0, 0.06);
-    overflow: hidden;
     height: 850px;
     box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.08);
   }

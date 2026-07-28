@@ -903,30 +903,29 @@ export default function App() {
           </div>
         </header>
 
-        {/* Database Warning/Info Alert modal */}
+        {/* Database Warning/Info Alert banner */}
         {showDbAlert && (
           <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
-            display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 120
+            background: dbSynced ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+            borderBottom: '1px solid rgba(0, 0, 0, 0.04)',
+            padding: '10px 16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '0.78rem',
+            color: dbSynced ? '#059669' : '#d97706',
+            fontWeight: 600,
+            zIndex: 5
           }}>
-            <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(0,0,0,0.06)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Database size={16} />
-                  Supabase Status
-                </h3>
-                <X size={18} className="cursor-pointer" onClick={() => setShowDbAlert(false)} />
-              </div>
-              <p style={{ fontSize: '0.82rem', color: '#475569', lineHeight: 1.5, marginBottom: '12px' }}>
-                {dbSynced ? (
-                  "Connected directly to your Supabase PostgreSQL instance! Changes to chores, catalog shelf requirements, and chat logs are synchronized in real-time."
-                ) : (
-                  "Currently operating in local memory sandbox. To link your database, copy the SQL schemas from implementation_plan.md and execute them in your Supabase SQL editor."
-                )}
-              </p>
-              <button className="btn-primary" style={{ width: '100%', padding: '9px' }} onClick={() => setShowDbAlert(false)}>Close</button>
-            </div>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, paddingRight: '8px' }}>
+              <Info size={14} style={{ flexShrink: 0 }} />
+              <span>
+                {dbSynced 
+                  ? 'Connected and syncing with Supabase!' 
+                  : 'Offline sandbox mode. Execute SQL schemas in Supabase to sync.'}
+              </span>
+            </span>
+            <X size={14} className="cursor-pointer" onClick={() => setShowDbAlert(false)} style={{ flexShrink: 0 }} />
           </div>
         )}
 
