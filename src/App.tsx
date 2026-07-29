@@ -807,25 +807,8 @@ export default function App() {
           }
           setViewLanding(false);
         } else if (data?.user) {
-          // Bypass email confirmation guard and log them in in local-first mode
-          const mockUser = {
-            id: data.user.id || generateUUID(),
-            email: authEmail,
-            user_metadata: {
-              name: authName.trim() || cleanMockName(authEmail)
-            }
-          };
-          const mockSession = { user: mockUser, access_token: 'mock-token' };
-          setSession(mockSession);
-          setCurrentUserProfile({
-            id: mockUser.id,
-            name: mockUser.user_metadata.name,
-            avatar: 'cat',
-            color: getRandomColor()
-          });
-          setDbSynced(false); // local-first offline fallback
-          setViewLanding(false);
-          alert('Registered successfully! Skipped SMTP email link verification to login instantly in local-first mode.');
+          alert('Signup successful! A verification email has been sent. Please verify your email before logging in.');
+          setAuthMode('login');
         }
       } else if (authMode === 'login') {
         if (!authPassword) throw new Error('Password is required');
@@ -834,30 +817,7 @@ export default function App() {
           password: authPassword
         });
         
-        // V8: email not confirmed guard
         if (error) {
-          if (error.message.toLowerCase().includes('confirm') || error.message.toLowerCase().includes('verified') || error.status === 400) {
-            // Bypass and log in in local-first mode
-            const mockUser = {
-              id: generateUUID(),
-              email: authEmail,
-              user_metadata: {
-                name: cleanMockName(authEmail)
-              }
-            };
-            const mockSession = { user: mockUser, access_token: 'mock-token' };
-            setSession(mockSession);
-            setCurrentUserProfile({
-              id: mockUser.id,
-              name: mockUser.user_metadata.name,
-              avatar: 'cat',
-              color: getRandomColor()
-            });
-            setDbSynced(false);
-            setViewLanding(false);
-            alert('Welcome! Logged in using local-first sandbox mode (skipped pending SMTP verification).');
-            return;
-          }
           throw error;
         }
 
