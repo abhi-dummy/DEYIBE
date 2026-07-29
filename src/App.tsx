@@ -91,6 +91,7 @@ export default function App() {
   
   // V8: Unverified Email verification state
   const [unverifiedEmail] = useState<string | null>(null);
+  const [anthropicKeyInput, setAnthropicKeyInput] = useState<string>(() => localStorage.getItem('anthropic_api_key') || '');
 
   // Kompa (Group) Management States
   const [joinedKompas, setJoinedKompas] = useState<Kompa[]>([]);
@@ -1728,9 +1729,9 @@ export default function App() {
       reader.readAsDataURL(file);
       const base64Image = await base64Promise;
 
-      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+      const apiKey = localStorage.getItem('anthropic_api_key') || import.meta.env.VITE_ANTHROPIC_API_KEY;
       if (!apiKey) {
-        throw new Error('Claude API key (VITE_ANTHROPIC_API_KEY) is missing. Set it in .env');
+        throw new Error('Claude API key is missing. Set VITE_ANTHROPIC_API_KEY in your .env or enter it below.');
       }
 
       setOcrProgress('Analyzing receipt layout with Claude Haiku...');
@@ -4536,6 +4537,30 @@ Return ONLY a valid JSON object matching the following structure. Do not output 
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <button className="btn-primary" style={{ padding: '8px 12px', fontSize: '0.75rem', flex: 1, borderRadius: '4px' }} onClick={() => triggerOCRScan('Costco')}>Scan Costco Preset</button>
                             <button className="btn-secondary" style={{ padding: '8px 12px', fontSize: '0.75rem', flex: 1, borderRadius: '4px' }} onClick={() => triggerOCRScan('Walmart')}>Scan Walmart Preset</button>
+                          </div>
+
+                          <div style={{ marginTop: '16px', borderTop: '1px solid rgba(25, 23, 21, 0.08)', paddingTop: '12px', textAlign: 'left' }}>
+                            <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Anthropic Claude API Key (Optional Override)
+                            </label>
+                            <input 
+                              type="password"
+                              placeholder="sk-ant-..."
+                              value={anthropicKeyInput}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setAnthropicKeyInput(val);
+                                if (val) {
+                                  localStorage.setItem('anthropic_api_key', val);
+                                } else {
+                                  localStorage.removeItem('anthropic_api_key');
+                                }
+                              }}
+                              style={{ width: '100%', padding: '6px', fontSize: '0.75rem', marginTop: '4px', borderRadius: '4px', border: '1px solid rgba(25, 23, 21, 0.15)' }}
+                            />
+                            <p style={{ fontSize: '0.62rem', color: '#8c857e', marginTop: '3px' }}>
+                              Saved locally in browser localStorage (never committed to repository).
+                            </p>
                           </div>
                         </div>
                       )}
