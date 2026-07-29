@@ -71,19 +71,6 @@ const triggerPushNotification = async (title: string, body: string) => {
   new Notification(title, { body });
 };
 
-const generateUUID = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-};
-
-const cleanMockName = (email: string) => {
-  const prefix = email.split('@')[0];
-  const nameOnly = prefix.replace(/\d+$/, '');
-  if (!nameOnly) return 'Roommate';
-  return nameOnly.charAt(0).toUpperCase() + nameOnly.slice(1);
-};
 
 export default function App() {
   // SaaS Landing Page / Auth Switcher State
@@ -145,7 +132,8 @@ export default function App() {
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
 
   // DB Sync indicator status
-  const [dbSynced, setDbSynced] = useState<boolean>(false);
+  const dbSynced = true;
+  const setDbSynced = (_val: boolean) => {};
   const [dbLoading, setDbLoading] = useState<boolean>(false);
   const [showDbAlert, setShowDbAlert] = useState<boolean>(false);
 
@@ -905,35 +893,7 @@ export default function App() {
         setAuthMode('login');
       }
     } catch (err: any) {
-      const isFetchError = err.message && (
-        err.message.toLowerCase().includes('fetch') ||
-        err.message.toLowerCase().includes('network') ||
-        err.message.toLowerCase().includes('connection')
-      );
-
-      if (isFetchError) {
-        // Fallback to local-first sandbox mode immediately
-        const mockUser = {
-          id: generateUUID(),
-          email: authEmail || 'offline-user@deyibe.local',
-          user_metadata: {
-            name: authName.trim() || cleanMockName(authEmail || 'offline-user@deyibe.local')
-          }
-        };
-        const mockSession = { user: mockUser, access_token: 'mock-token' };
-        setSession(mockSession);
-        setCurrentUserProfile({
-          id: mockUser.id,
-          name: mockUser.user_metadata.name,
-          avatar: 'cat',
-          color: getRandomColor()
-        });
-        setDbSynced(false);
-        setViewLanding(false);
-        alert('Supabase connection offline (Failed to fetch). Started immediately in local-first sandbox mode!');
-      } else {
-        alert(err.message || 'Authentication error occurred.');
-      }
+      alert(err.message || 'Authentication error occurred.');
     } finally {
       setAuthLoading(false);
     }
@@ -973,22 +933,6 @@ export default function App() {
   // Create a new Kompa
   const handleCreateKompa = async () => {
     if (!kompaNameInput.trim() || !currentUserProfile) return;
-
-    if (!dbSynced) {
-      const mockId = generateUUID();
-      const mockK: Kompa = {
-        id: mockId,
-        name: kompaNameInput.trim(),
-        inviteCode: Math.floor(100000 + Math.random() * 900000).toString(),
-        ownerId: currentUserProfile.id
-      };
-      setJoinedKompas(prev => [mockK, ...prev]);
-      setActiveKompa(mockK);
-      setKompaNameInput('');
-      setShowSettingsModal(false);
-      alert(`Welcome to ${mockK.name} Kompa! (Created in local-first sandbox mode)`);
-      return;
-    }
 
     const userOwnedCount = joinedKompas.filter(k => k.ownerId === currentUserProfile.id).length;
     if (userOwnedCount >= 3) {
@@ -1050,11 +994,6 @@ export default function App() {
   // Join a Kompa
   const handleJoinKompa = async () => {
     if (!kompaCodeInput.trim() || !currentUserProfile) return;
-
-    if (!dbSynced) {
-      alert("You are currently in local-first sandbox mode. Joining groups via invite codes requires a verified online connection.");
-      return;
-    }
 
     try {
       setDbLoading(true);
