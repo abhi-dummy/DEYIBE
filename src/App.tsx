@@ -1732,12 +1732,19 @@ export default function App() {
         })
       });
 
+      const rawText = await response.text();
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: `Server error status ${response.status}` }));
-        throw new Error(errorData.error || `Server returned status ${response.status}`);
+        let errMsg = `Server returned status ${response.status}`;
+        try {
+          const parsed = JSON.parse(rawText);
+          errMsg = parsed.error || errMsg;
+        } catch {
+          errMsg = rawText || errMsg;
+        }
+        throw new Error(errMsg);
       }
 
-      const resJson = await response.json();
+      const resJson = JSON.parse(rawText);
       const textContent = resJson.content
         .filter((c: any) => c.type === 'text')
         .map((c: any) => c.text)
