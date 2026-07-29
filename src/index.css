@@ -1,7 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600;1,700&display=swap');
 
 :root {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -15,7 +15,7 @@
   -moz-osx-font-smoothing: grayscale;
 
   --font-serif: 'Playfair Display', Georgia, serif;
-  --font-sans: 'Inter', -apple-system, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, sans-serif;
 
   --bg-gradient: #fbfbfa;
   --glass-bg: #ffffff;
@@ -972,4 +972,68 @@ button {
   align-items: center;
   padding-top: 4px;
   border-top: 1px dashed rgba(25, 23, 21, 0.03);
+}
+
+/* Playful Split Calendar Tracker */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.calendar-header-cell {
+  text-align: center;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #8c857e;
+  text-transform: uppercase;
+  padding: 4px 0;
+}
+
+.calendar-cell {
+  aspect-ratio: 0.9;
+  background: #ffffff;
+  border: 1.5px solid rgba(25, 23, 21, 0.08);
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.calendar-cell:hover {
+  background: rgba(25, 23, 21, 0.02);
+  border-color: #191715;
+}
+
+.calendar-cell-today {
+  border-color: #191715;
+  background: rgba(25, 23, 21, 0.02);
+}
+
+.calendar-day-num {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #8c857e;
+}
+
+.calendar-cell-today .calendar-day-num {
+  color: #191715;
+}
+
+.calendar-cell-amount {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--accent-rose);
+  text-align: right;
+}
+
+.calendar-cell-avatars {
+  display: flex;
+  gap: 2px;
+  overflow: hidden;
+  max-width: 100%;
 }
