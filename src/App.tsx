@@ -92,7 +92,7 @@ export default function App() {
 
   // Authentication & Session States
   const [session, setSession] = useState<any | null>(null);
-  const [authMode, setAuthMode] = useState<'login' | 'signup' | 'forgot_password' | 'verify_otp' | 'verify_pending'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'signup' | 'forgot_password' | 'verify_otp' | 'verify_signup_otp' | 'verify_pending'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authConfirmPassword, setAuthConfirmPassword] = useState('');
@@ -787,7 +787,36 @@ export default function App() {
           throw new Error('Passwords do not match');
         }
         
-        // V8: Pass emailRedirectTo back to current origin (Render URL or localhost)
+        const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        setActualOtpCode(generatedOtp);
+
+        try {
+          const response = await fetch('/api/send-otp', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              toEmail: authEmail,
+              otpCode: generatedOtp
+            })
+          });
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            console.error('Failed sending SendGrid OTP mail:', errData.error);
+          }
+        } catch (e) {
+          console.error('Failed calling SendGrid OTP backend route:', e);
+        }
+
+        alert(`Verification code has been sent to ${authEmail}. (For convenience, code is: ${generatedOtp})`);
+        setAuthMode('verify_signup_otp');
+      } else if (authMode === 'verify_signup_otp') {
+        if (!authOtpCode) throw new Error('Verification code is required');
+        if (authOtpCode.trim() !== actualOtpCode.trim()) {
+          throw new Error('Invalid verification code.');
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email: authEmail,
           password: authPassword,
@@ -806,10 +835,12 @@ export default function App() {
             fetchUserProfile(data.user.id);
           }
           setViewLanding(false);
+          alert('Account created and verified successfully!');
         } else if (data?.user) {
-          alert('Signup successful! A verification email has been sent. Please verify your email before logging in.');
+          alert('Account created successfully! If email confirmation is enabled on your Supabase project, check your email to activate. Otherwise, you can now log in.');
           setAuthMode('login');
         }
+        setAuthOtpCode('');
       } else if (authMode === 'login') {
         if (!authPassword) throw new Error('Password is required');
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -2602,9 +2633,11 @@ export default function App() {
               </div>
             )}
 
-            {authMode === 'verify_otp' && (
+            {(authMode === 'verify_otp' || authMode === 'verify_signup_otp') && (
               <div>
-                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#191715', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Enter OTP Passcode</label>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#191715', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {authMode === 'verify_signup_otp' ? 'Enter Signup OTP Passcode' : 'Enter OTP Passcode'}
+                </label>
                 <input 
                   type="text" 
                   placeholder="e.g. 123456" 
@@ -2626,6 +2659,8 @@ export default function App() {
                 'Create Account'
               ) : authMode === 'forgot_password' ? (
                 'Send One-Time Passcode'
+              ) : authMode === 'verify_signup_otp' ? (
+                'Verify & Create Account'
               ) : (
                 'Verify & Log In'
               )}
@@ -2642,9 +2677,12 @@ export default function App() {
               </button>
             )}
 
-            {(authMode === 'forgot_password' || authMode === 'verify_otp') && (
+            {(authMode === 'forgot_password' || authMode === 'verify_otp' || authMode === 'verify_signup_otp') && (
               <button 
-                onClick={() => setAuthMode('login')}
+                onClick={() => {
+                  setAuthMode('login');
+                  setAuthOtpCode('');
+                }}
                 style={{ background: 'none', border: 'none', color: '#191715', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
               >
                 Back to Sign In
