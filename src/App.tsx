@@ -969,7 +969,35 @@ export default function App() {
         setAuthMode('login');
       }
     } catch (err: any) {
-      alert(err.message || 'Authentication error occurred.');
+      const isFetchError = err.message && (
+        err.message.toLowerCase().includes('fetch') ||
+        err.message.toLowerCase().includes('network') ||
+        err.message.toLowerCase().includes('connection')
+      );
+
+      if (isFetchError) {
+        // Fallback to local-first sandbox mode immediately
+        const mockUser = {
+          id: `u_${Date.now()}`,
+          email: authEmail || 'offline-user@deyibe.local',
+          user_metadata: {
+            name: authName.trim() || authEmail.split('@')[0] || 'Roommate'
+          }
+        };
+        const mockSession = { user: mockUser, access_token: 'mock-token' };
+        setSession(mockSession);
+        setCurrentUserProfile({
+          id: mockUser.id,
+          name: mockUser.user_metadata.name,
+          avatar: 'cat',
+          color: getRandomColor()
+        });
+        setDbSynced(false);
+        setViewLanding(false);
+        alert('Supabase connection offline (Failed to fetch). Started immediately in local-first sandbox mode!');
+      } else {
+        alert(err.message || 'Authentication error occurred.');
+      }
     } finally {
       setAuthLoading(false);
     }
