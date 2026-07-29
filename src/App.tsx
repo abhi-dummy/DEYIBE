@@ -137,9 +137,9 @@ export default function App() {
   const [dbLoading, setDbLoading] = useState<boolean>(false);
   const [showDbAlert, setShowDbAlert] = useState<boolean>(false);
 
-  // Real-time Chat Typing States
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const typingTimeoutRef = useRef<any>(null);
+  const syncChannelRef = useRef<any>(null);
 
   // UI Flow Logs (Timeline)
   const [flowLogs, setFlowLogs] = useState<FlowLog[]>([]);
@@ -188,23 +188,25 @@ export default function App() {
     setChatInput(val);
     if (!currentUserProfile || !activeKompa) return;
 
-    // Send typing broadcast
-    const typingChannel = supabase.channel(`typing_${activeKompa.id}`);
-    typingChannel.send({
-      type: 'broadcast',
-      event: 'typing',
-      payload: { name: currentUserProfile.name, isTyping: true }
-    });
-
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    
-    typingTimeoutRef.current = setTimeout(() => {
-      typingChannel.send({
+    if (syncChannelRef.current) {
+      syncChannelRef.current.send({
         type: 'broadcast',
         event: 'typing',
-        payload: { name: currentUserProfile.name, isTyping: false }
+        payload: { name: currentUserProfile.name, isTyping: true }
       });
-    }, 1500);
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      
+      typingTimeoutRef.current = setTimeout(() => {
+        if (syncChannelRef.current) {
+          syncChannelRef.current.send({
+            type: 'broadcast',
+            event: 'typing',
+            payload: { name: currentUserProfile.name, isTyping: false }
+          });
+        }
+      }, 1500);
+    }
   };
 
   const [newRequestName, setNewRequestName] = useState('');
@@ -757,8 +759,11 @@ export default function App() {
       })
       .subscribe();
 
+    syncChannelRef.current = syncChannel;
+
     return () => {
       supabase.removeChannel(syncChannel);
+      syncChannelRef.current = null;
     };
   }, [dbSynced, activeKompa, currentUserProfile, activeRun]);
 
