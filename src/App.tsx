@@ -636,9 +636,9 @@ export default function App() {
   useEffect(() => {
     if (!dbSynced || !activeKompa) return;
 
-    // Subscribe to chat messages
-    const chatChannel = supabase
-      .channel('kompa_chat_changes')
+    // Subscribe to all changes on a single consolidated channel to prevent Postgres connection pool exhaustion
+    const syncChannel = supabase
+      .channel(`kompa_sync_${activeKompa.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages', filter: `kompa_id=eq.${activeKompa.id}` }, async (payload) => {
         const { data } = await supabase.from('chat_messages').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: true });
         if (data) {
@@ -658,11 +658,6 @@ export default function App() {
           }
         }
       })
-      .subscribe();
-
-    // Subscribe to tasks/chores
-    const taskChannel = supabase
-      .channel('kompa_task_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
         const { data } = await supabase.from('tasks').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
         if (data) {
@@ -677,11 +672,6 @@ export default function App() {
           })));
         }
       })
-      .subscribe();
-
-    // Subscribe to shelf items
-    const shelfChannel = supabase
-      .channel('kompa_shelf_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shelf_items', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
         const { data } = await supabase.from('shelf_items').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
         if (data) {
@@ -696,21 +686,11 @@ export default function App() {
           })));
         }
       })
-      .subscribe();
-
-    // Subscribe to typing broadcast
-    const typingChannel = supabase
-      .channel(`typing_${activeKompa.id}`)
       .on('broadcast', { event: 'typing' }, (payload: any) => {
         if (payload.payload && payload.payload.name !== currentUserProfile?.name) {
           setTypingUser(payload.payload.isTyping ? payload.payload.name : null);
         }
       })
-      .subscribe();
-
-    // Subscribe to inventory items
-    const invChannel = supabase
-      .channel('kompa_inv_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
         const { data } = await supabase
           .from('inventory_items')
@@ -731,11 +711,6 @@ export default function App() {
           })));
         }
       })
-      .subscribe();
-
-    // Subscribe to expenses changes
-    const expenseChannel = supabase
-      .channel('kompa_expense_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
         const { data } = await supabase.from('expenses').select('*').eq('kompa_id', activeKompa.id).order('date', { ascending: false });
         if (data) {
@@ -752,71 +727,36 @@ export default function App() {
           })));
         }
       })
-      .subscribe();
-
-    // Subscribe to run sessions changes
-    const runSessionsChannel = supabase
-      .channel('kompa_run_sessions_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'run_sessions', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
         loadKompaData();
       })
-      .subscribe();
-
-    // Subscribe to run requests changes to notify shopper
-    const runRequestsChannel = supabase
-      .channel('kompa_run_requests_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'run_requests' }, async (payload: any) => {
         if (payload.eventType === 'INSERT') {
-          // If shopper matches current user and request was made by someone else
           if (activeRun && activeRun.shopperId === currentUserProfile?.id) {
             const req = payload.new;
             if (req && req.requester_id !== currentUserProfile?.id) {
               const requesterName = kompaMembers.find(h => h.id === req.requester_id)?.name || 'Roommate';
-              
-              // Trigger Native Push Notification
               triggerPushNotification('New Kompa Request', `${requesterName} added "${req.item_name}" to your run list!`);
-
-              // Fire local alerts
               addPulse('New Request Added', `${requesterName} added "${req.item_name}" to your run list.`, 'info');
             }
           }
         }
         loadKompaData();
       })
-      .subscribe();
-
-    // V7/V8: Realtime Push Notifications sync listener on pulse_alerts insertions
-    const pulseAlertsChannel = supabase
-      .channel('kompa_pulse_alerts_changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pulse_alerts', filter: `kompa_id=eq.${activeKompa.id}` }, (payload: any) => {
         const alert = payload.new;
         if (alert) {
-          // Fire Native Browser Notification if active and not created by current user
           triggerPushNotification(alert.title, alert.message);
         }
         loadKompaData();
       })
-      .subscribe();
-
-    // Realtime Kompa Members list changes
-    const kompaMembersChannel = supabase
-      .channel('kompa_members_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kompa_members', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
         loadKompaData();
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(chatChannel);
-      supabase.removeChannel(taskChannel);
-      supabase.removeChannel(shelfChannel);
-      supabase.removeChannel(typingChannel);
-      supabase.removeChannel(invChannel);
-      supabase.removeChannel(expenseChannel);
-      supabase.removeChannel(runSessionsChannel);
-      supabase.removeChannel(runRequestsChannel);
-      supabase.removeChannel(pulseAlertsChannel);
-      supabase.removeChannel(kompaMembersChannel);
+      supabase.removeChannel(syncChannel);
     };
   }, [dbSynced, activeKompa, currentUserProfile, activeRun]);
 
