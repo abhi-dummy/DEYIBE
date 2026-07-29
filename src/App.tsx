@@ -1052,17 +1052,7 @@ export default function App() {
     if (!kompaCodeInput.trim() || !currentUserProfile) return;
 
     if (!dbSynced) {
-      const mockK: Kompa = {
-        id: generateUUID(),
-        name: `Kompa ${kompaCodeInput}`,
-        inviteCode: kompaCodeInput.trim(),
-        ownerId: 'system'
-      };
-      setJoinedKompas(prev => [mockK, ...prev]);
-      setActiveKompa(mockK);
-      setKompaCodeInput('');
-      setShowSettingsModal(false);
-      alert(`Welcome to ${mockK.name}! (Joined in local-first sandbox mode)`);
+      alert("You are currently in local-first sandbox mode. Joining groups via invite codes requires a verified online connection.");
       return;
     }
 
