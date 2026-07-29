@@ -71,6 +71,20 @@ const triggerPushNotification = async (title: string, body: string) => {
   new Notification(title, { body });
 };
 
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
+const cleanMockName = (email: string) => {
+  const prefix = email.split('@')[0];
+  const nameOnly = prefix.replace(/\d+$/, '');
+  if (!nameOnly) return 'Roommate';
+  return nameOnly.charAt(0).toUpperCase() + nameOnly.slice(1);
+};
+
 export default function App() {
   // SaaS Landing Page / Auth Switcher State
   const [viewLanding, setViewLanding] = useState<boolean>(true);
@@ -795,10 +809,10 @@ export default function App() {
         } else if (data?.user) {
           // Bypass email confirmation guard and log them in in local-first mode
           const mockUser = {
-            id: data.user.id || `u_${Date.now()}`,
+            id: data.user.id || generateUUID(),
             email: authEmail,
             user_metadata: {
-              name: authName.trim() || authEmail.split('@')[0]
+              name: authName.trim() || cleanMockName(authEmail)
             }
           };
           const mockSession = { user: mockUser, access_token: 'mock-token' };
@@ -825,10 +839,10 @@ export default function App() {
           if (error.message.toLowerCase().includes('confirm') || error.message.toLowerCase().includes('verified') || error.status === 400) {
             // Bypass and log in in local-first mode
             const mockUser = {
-              id: `u_${Date.now()}`,
+              id: generateUUID(),
               email: authEmail,
               user_metadata: {
-                name: authEmail.split('@')[0]
+                name: cleanMockName(authEmail)
               }
             };
             const mockSession = { user: mockUser, access_token: 'mock-token' };
@@ -909,10 +923,10 @@ export default function App() {
       if (isFetchError) {
         // Fallback to local-first sandbox mode immediately
         const mockUser = {
-          id: `u_${Date.now()}`,
+          id: generateUUID(),
           email: authEmail || 'offline-user@deyibe.local',
           user_metadata: {
-            name: authName.trim() || authEmail.split('@')[0] || 'Roommate'
+            name: authName.trim() || cleanMockName(authEmail || 'offline-user@deyibe.local')
           }
         };
         const mockSession = { user: mockUser, access_token: 'mock-token' };
@@ -968,6 +982,22 @@ export default function App() {
   // Create a new Kompa
   const handleCreateKompa = async () => {
     if (!kompaNameInput.trim() || !currentUserProfile) return;
+
+    if (!dbSynced) {
+      const mockId = generateUUID();
+      const mockK: Kompa = {
+        id: mockId,
+        name: kompaNameInput.trim(),
+        inviteCode: Math.floor(100000 + Math.random() * 900000).toString(),
+        ownerId: currentUserProfile.id
+      };
+      setJoinedKompas(prev => [mockK, ...prev]);
+      setActiveKompa(mockK);
+      setKompaNameInput('');
+      setShowSettingsModal(false);
+      alert(`Welcome to ${mockK.name} Kompa! (Created in local-first sandbox mode)`);
+      return;
+    }
 
     const userOwnedCount = joinedKompas.filter(k => k.ownerId === currentUserProfile.id).length;
     if (userOwnedCount >= 3) {
@@ -1029,6 +1059,21 @@ export default function App() {
   // Join a Kompa
   const handleJoinKompa = async () => {
     if (!kompaCodeInput.trim() || !currentUserProfile) return;
+
+    if (!dbSynced) {
+      const mockK: Kompa = {
+        id: generateUUID(),
+        name: `Kompa ${kompaCodeInput}`,
+        inviteCode: kompaCodeInput.trim(),
+        ownerId: 'system'
+      };
+      setJoinedKompas(prev => [mockK, ...prev]);
+      setActiveKompa(mockK);
+      setKompaCodeInput('');
+      setShowSettingsModal(false);
+      alert(`Welcome to ${mockK.name}! (Joined in local-first sandbox mode)`);
+      return;
+    }
 
     try {
       setDbLoading(true);
