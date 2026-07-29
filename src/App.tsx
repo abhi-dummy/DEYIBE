@@ -797,7 +797,7 @@ export default function App() {
           console.error('Failed calling SendGrid OTP backend route:', e);
         }
 
-        alert(`Verification code has been sent to ${authEmail}. (For convenience, code is: ${generatedOtp})`);
+        alert(`Verification code has been sent to ${authEmail}.`);
         setAuthMode('verify_signup_otp');
       } else if (authMode === 'verify_signup_otp') {
         if (!authOtpCode) throw new Error('Verification code is required');
@@ -872,7 +872,7 @@ export default function App() {
           console.error('Failed calling SendGrid OTP backend route:', e);
         }
 
-        alert(`Verification code has been sent to ${authEmail}. (For convenience, code is: ${generatedOtp})`);
+        alert(`Verification code has been sent to ${authEmail}.`);
         setAuthMode('verify_otp');
       } else if (authMode === 'verify_otp') {
         if (!authOtpCode) throw new Error('Verification code is required');
