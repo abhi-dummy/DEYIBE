@@ -91,7 +91,6 @@ export default function App() {
   
   // V8: Unverified Email verification state
   const [unverifiedEmail] = useState<string | null>(null);
-  const [anthropicKeyInput, setAnthropicKeyInput] = useState<string>(() => localStorage.getItem('anthropic_api_key') || '');
 
   // Kompa (Group) Management States
   const [joinedKompas, setJoinedKompas] = useState<Kompa[]>([]);
@@ -861,32 +860,23 @@ export default function App() {
         const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
         setActualOtpCode(generatedOtp);
 
-        const sgKey = import.meta.env.VITE_SENDGRID_API_KEY;
-        const senderEmail = import.meta.env.VITE_SENDGRID_SENDER_EMAIL || 'meetabhi3105@gmail.com';
-
-        if (sgKey) {
-          try {
-            await fetch('https://corsproxy.io/?https://api.sendgrid.com/v3/mail/send', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sgKey}`
-              },
-              body: JSON.stringify({
-                personalizations: [{
-                  to: [{ email: authEmail }]
-                }],
-                from: { email: senderEmail, name: 'Deyibe Auth' },
-                subject: 'Deyibe Password Reset Code',
-                content: [{
-                  type: 'text/plain',
-                  value: `Your 6-digit verification code is: ${generatedOtp}`
-                }]
-              })
-            });
-          } catch (e) {
-            console.error('Failed sending SendGrid mail:', e);
+        try {
+          const response = await fetch('/api/send-otp', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              toEmail: authEmail,
+              otpCode: generatedOtp
+            })
+          });
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            console.error('Failed sending SendGrid OTP mail:', errData.error);
           }
+        } catch (e) {
+          console.error('Failed calling SendGrid OTP backend route:', e);
         }
 
         alert(`Verification code has been sent to ${authEmail}. (For convenience, code is: ${generatedOtp})`);
@@ -1706,14 +1696,14 @@ export default function App() {
     }, 2000);
   };
 
-  // OCR Custom Receipt upload (V12: Proxied Claude API Haiku OCR parser)
+  // OCR Custom Receipt upload (V12: Express Backend Claude API OCR parser)
   const handleCustomImageOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setOcrScanning(true);
     setOcrResult(null);
-    setOcrProgress('Reading receipt using Claude API...');
+    setOcrProgress('Reading receipt using Claude API backend...');
 
     try {
       const reader = new FileReader();
@@ -1729,69 +1719,22 @@ export default function App() {
       reader.readAsDataURL(file);
       const base64Image = await base64Promise;
 
-      const apiKey = localStorage.getItem('anthropic_api_key') || import.meta.env.VITE_ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        throw new Error('Claude API key is missing. Set VITE_ANTHROPIC_API_KEY in your .env or enter it below.');
-      }
+      setOcrProgress('Analyzing receipt layout with Claude Haiku on backend...');
 
-      setOcrProgress('Analyzing receipt layout with Claude Haiku...');
-
-      const response = await fetch('https://corsproxy.io/?https://api.anthropic.com/v1/messages', {
+      const response = await fetch('/api/ocr', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'claude-3-5-haiku-latest',
-          max_tokens: 2000,
-          system: `You are an expert receipt parser. Analyze the uploaded receipt image and extract:
-1. Store name (as clean as possible, e.g. "Costco" instead of "COSTCO WHOLESALE #1034")
-2. Individual line items (excluding taxes, subtotals, card details, discounts).
-   - For each item, extract the name and final price (after item-specific discounts).
-   - If a discount was applied to the entire bill, represent it as an item with a negative price (e.g., name: "Coupon Discount", price: -5.00).
-3. Subtotal
-4. Tax (extremely important: look very closely for any tax lines, which may be labeled as "Tax", "Sales Tax", "GST", "HST", "PST", "VAT", "Surtax", "State Tax", "County Tax", etc. Sum all these tax lines together and put the total amount in the "tax" field of the JSON. Do NOT include tax or sales tax lines as separate entries in the "items" list).
-5. Tip (if present on the receipt)
-6. Total amount (the final grand total)
-
-Return ONLY a valid JSON object matching the following structure. Do not output markdown, preambles, or formatting other than the raw JSON.
-{
-  "store_name": "Store Name",
-  "items": [
-    { "name": "Item Name", "price": 9.99 }
-  ],
-  "subtotal": 9.99,
-  "tax": 0.80,
-  "tip": 0.00,
-  "total": 10.79
-}`,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  source: {
-                    type: 'base64',
-                    media_type: file.type || 'image/jpeg',
-                    data: base64Image,
-                  },
-                },
-                {
-                  type: 'text',
-                  text: 'Parse this receipt and return the items and totals in JSON format.',
-                },
-              ],
-            },
-          ],
+          imageBase64: base64Image,
+          mediaType: file.type || 'image/jpeg'
         })
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Claude API request failed: ${errorText}`);
+        const errorData = await response.json().catch(() => ({ error: `Server error status ${response.status}` }));
+        throw new Error(errorData.error || `Server returned status ${response.status}`);
       }
 
       const resJson = await response.json();
@@ -4537,30 +4480,6 @@ Return ONLY a valid JSON object matching the following structure. Do not output 
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <button className="btn-primary" style={{ padding: '8px 12px', fontSize: '0.75rem', flex: 1, borderRadius: '4px' }} onClick={() => triggerOCRScan('Costco')}>Scan Costco Preset</button>
                             <button className="btn-secondary" style={{ padding: '8px 12px', fontSize: '0.75rem', flex: 1, borderRadius: '4px' }} onClick={() => triggerOCRScan('Walmart')}>Scan Walmart Preset</button>
-                          </div>
-
-                          <div style={{ marginTop: '16px', borderTop: '1px solid rgba(25, 23, 21, 0.08)', paddingTop: '12px', textAlign: 'left' }}>
-                            <label style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                              Anthropic Claude API Key (Optional Override)
-                            </label>
-                            <input 
-                              type="password"
-                              placeholder="sk-ant-..."
-                              value={anthropicKeyInput}
-                              onChange={e => {
-                                const val = e.target.value;
-                                setAnthropicKeyInput(val);
-                                if (val) {
-                                  localStorage.setItem('anthropic_api_key', val);
-                                } else {
-                                  localStorage.removeItem('anthropic_api_key');
-                                }
-                              }}
-                              style={{ width: '100%', padding: '6px', fontSize: '0.75rem', marginTop: '4px', borderRadius: '4px', border: '1px solid rgba(25, 23, 21, 0.15)' }}
-                            />
-                            <p style={{ fontSize: '0.62rem', color: '#8c857e', marginTop: '3px' }}>
-                              Saved locally in browser localStorage (never committed to repository).
-                            </p>
                           </div>
                         </div>
                       )}
