@@ -141,6 +141,12 @@ export default function App() {
   const typingTimeoutRef = useRef<any>(null);
   const syncChannelRef = useRef<any>(null);
 
+  // Shopping Run Timer States
+  const [runTimerDuration, setRunTimerDuration] = useState<number>(20 * 60);
+  const [runTimerActive, setRunTimerActive] = useState<boolean>(false);
+  const [showStillShoppingPrompt, setShowStillShoppingPrompt] = useState<boolean>(false);
+  const [promptTimeoutRemaining, setPromptTimeoutRemaining] = useState<number>(60);
+
   // UI Flow Logs (Timeline)
   const [flowLogs, setFlowLogs] = useState<FlowLog[]>([]);
 
@@ -281,6 +287,78 @@ export default function App() {
       Notification.requestPermission();
     }
   }, []);
+
+  // V8: Shopping Run 20m Timer ticking logic
+  useEffect(() => {
+    let interval: any = null;
+    if (runTimerActive && runTimerDuration > 0) {
+      interval = setInterval(() => {
+        setRunTimerDuration(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setRunTimerActive(false);
+            setShowStillShoppingPrompt(true);
+            setPromptTimeoutRemaining(60);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [runTimerActive, runTimerDuration]);
+
+  // V8: Prompt response window countdown
+  useEffect(() => {
+    let interval: any = null;
+    if (showStillShoppingPrompt && promptTimeoutRemaining > 0) {
+      interval = setInterval(() => {
+        setPromptTimeoutRemaining(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setShowStillShoppingPrompt(false);
+            // Auto Checkout
+            handleCheckoutRun();
+            alert("Shopping run automatically completed due to inactivity.");
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showStillShoppingPrompt, promptTimeoutRemaining]);
+
+  const handleStillShoppingResponse = (stillShopping: boolean) => {
+    setShowStillShoppingPrompt(false);
+    if (stillShopping) {
+      // Add 20 minutes (1200 seconds)
+      const now = Date.now();
+      localStorage.setItem('deyibe_run_notified_at', now.toString());
+      setRunTimerDuration(20 * 60);
+      setRunTimerActive(true);
+      
+      // Post alert to chat / timeline
+      if (currentUserProfile && activeKompa) {
+        const text = `${currentUserProfile.name} is still shopping and extended the run by 20 minutes.`;
+        if (dbSynced) {
+          supabase.from('chat_messages').insert({
+            kompa_id: activeKompa.id,
+            sender_id: null,
+            text
+          });
+        }
+        addPulse('Run Extended', text, 'info');
+      }
+    } else {
+      // End run
+      handleCheckoutRun();
+    }
+  };
 
   // Helper for background safe database operations
   const safeDbWrite = async (operation: () => any) => {
@@ -583,8 +661,27 @@ export default function App() {
             replacementPrice: Number(r.replacement_price) || undefined
           })) : []
         });
+
+        // V8: Hydrate timer from localStorage if notified
+        const savedNotifiedAt = localStorage.getItem('deyibe_run_notified_at');
+        if (savedNotifiedAt) {
+          const elapsed = Math.floor((Date.now() - Number(savedNotifiedAt)) / 1000);
+          const remaining = (20 * 60) - elapsed;
+          if (remaining > 0) {
+            setRunTimerDuration(remaining);
+            setRunTimerActive(true);
+          } else {
+            setRunTimerDuration(0);
+            setRunTimerActive(false);
+            setShowStillShoppingPrompt(true);
+            setPromptTimeoutRemaining(60);
+          }
+        }
       } else {
         setActiveRun(null);
+        localStorage.removeItem('deyibe_run_notified_at');
+        setRunTimerActive(false);
+        setRunTimerDuration(20 * 60);
       }
 
       // V8: Load completed runs with high-fidelity request statistics and items counts
@@ -653,11 +750,15 @@ export default function App() {
             timestamp: new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           })));
 
-          // Increment unread count if we are not on chat tab
+          // V8: Fire device push notification & increment unread count if we are not the sender
           if (payload && payload.eventType === 'INSERT') {
             const newMsg = payload.new;
-            if (newMsg && newMsg.sender_id !== currentUserProfile?.id && activeTabRef.current !== 'chat') {
-              setUnreadChatCount(prev => prev + 1);
+            if (newMsg && newMsg.sender_id !== currentUserProfile?.id) {
+              const senderName = newMsg.sender_id ? (kompaMembers.find(m => m.id === newMsg.sender_id)?.name || 'Roommate') : 'System';
+              triggerPushNotification(`${activeKompa.name} - ${senderName}`, newMsg.text);
+              if (activeTabRef.current !== 'chat') {
+                setUnreadChatCount(prev => prev + 1);
+              }
             }
           }
         }
@@ -1465,6 +1566,11 @@ export default function App() {
       addPulse('Run Alert Broadcasted', text, 'info');
       
       setNotifyState('success');
+      // Save notification time and start timer
+      const now = Date.now();
+      localStorage.setItem('deyibe_run_notified_at', now.toString());
+      setRunTimerDuration(20 * 60);
+      setRunTimerActive(true);
     } catch (err: any) {
       console.error('Failed to notify Kompa members:', err);
       setNotifyState('failed');
@@ -1618,12 +1724,30 @@ export default function App() {
     // V7/V8: reload run data to populate completed runs list
     loadKompaData();
 
+    localStorage.removeItem('deyibe_run_notified_at');
+    setRunTimerActive(false);
+    setRunTimerDuration(20 * 60);
     setActiveRun(null);
     setNotifyState('idle');
     confetti({
       particleCount: 80,
       spread: 60
     });
+  };
+
+  const handleCancelRun = async () => {
+    if (!activeRun) return;
+    if (dbSynced) {
+      await supabase
+        .from('run_sessions')
+        .update({ status: 'completed' })
+        .eq('id', activeRun.id);
+    }
+    localStorage.removeItem('deyibe_run_notified_at');
+    setRunTimerActive(false);
+    setRunTimerDuration(20 * 60);
+    setActiveRun(null);
+    setNotifyState('idle');
   };
 
   // OCR presets triggers with actual scanned Pleasanton Costco bill data
@@ -3866,6 +3990,32 @@ export default function App() {
                     <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '2px', color: '#191715', fontFamily: 'var(--font-serif)' }}>
                       {kompaMembers.find(h => h.id === activeRun.shopperId)?.name}'s {activeRun.store} Run
                     </h3>
+                    {runTimerActive && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                        <span style={{ 
+                          fontSize: '0.72rem', 
+                          fontWeight: 700, 
+                          color: 'var(--accent-rose)', 
+                          background: 'rgba(220, 38, 38, 0.08)', 
+                          padding: '2px 6px', 
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <span className="sync-glowing-light" style={{ width: '6px', height: '6px', background: 'var(--accent-rose)', boxShadow: '0 0 6px var(--accent-rose)' }}></span>
+                          Remaining: {Math.floor(runTimerDuration / 60)}:{(runTimerDuration % 60).toString().padStart(2, '0')}
+                        </span>
+                        
+                        <button 
+                          className="btn-secondary" 
+                          style={{ padding: '2px 6px', fontSize: '0.62rem', borderRadius: '4px', border: '1px solid rgba(25,23,21,0.1)', cursor: 'pointer' }}
+                          onClick={() => setRunTimerDuration(10)}
+                        >
+                          FF (10s)
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
                   {/* V8: Notify button with green Notified state machine */}
@@ -3989,7 +4139,7 @@ export default function App() {
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setActiveRun(null)}>Cancel Run</button>
+                  <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleCancelRun}>Cancel Run</button>
                   <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleCheckoutRun}>
                     Complete Checkout
                   </button>
@@ -4369,6 +4519,47 @@ export default function App() {
                 ))}
               </div>
             </div>
+
+            {/* V8: Shopping Run Timer Prompter Modal */}
+            {showStillShoppingPrompt && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(25, 23, 21, 0.4)', backdropFilter: 'blur(4px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 120
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '340px', border: '1px solid rgba(25, 23, 21, 0.1)', textAlign: 'center', padding: '20px', background: '#ffffff' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, fontFamily: 'var(--font-serif)', color: '#191715', marginBottom: '8px' }}>Are you still shopping?</h3>
+                  <p style={{ fontSize: '0.82rem', color: '#5e5954', marginBottom: '16px' }}>
+                    Your shopping run has been active for 20 minutes. Please respond or this run will automatically checkout in:
+                  </p>
+                  <div style={{ 
+                    fontSize: '1.8rem', 
+                    fontWeight: 800, 
+                    color: 'var(--accent-rose)', 
+                    marginBottom: '20px',
+                    fontFamily: 'monospace'
+                  }}>
+                    {promptTimeoutRemaining}s
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button 
+                      className="btn-secondary" 
+                      style={{ flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid rgba(25,23,21,0.1)', cursor: 'pointer' }}
+                      onClick={() => handleStillShoppingResponse(false)}
+                    >
+                      No, End Run
+                    </button>
+                    <button 
+                      className="btn-primary" 
+                      style={{ flex: 1, padding: '10px', borderRadius: '4px', cursor: 'pointer' }}
+                      onClick={() => handleStillShoppingResponse(true)}
+                    >
+                      Yes, Add 20m
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Settle Up Action Modal */}
             {showSettleModal && (
