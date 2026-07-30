@@ -1812,6 +1812,44 @@ export default function App() {
     }, 2000);
   };
 
+  // Compress base64 image client-side to prevent payload-too-large (413) blocks on production proxies like Render
+  const compressImageBase64 = (base64Str: string, mediaType: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1200;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          const compressedBase64 = compressedDataUrl.split(',')[1];
+          resolve(compressedBase64);
+        } else {
+          resolve(base64Str);
+        }
+      };
+      img.onerror = () => {
+        resolve(base64Str);
+      };
+      img.src = `data:${mediaType};base64,${base64Str}`;
+    });
+  };
+
   // OCR Custom Receipt upload (V12: Express Backend Claude API OCR parser)
   const handleCustomImageOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1833,9 +1871,12 @@ export default function App() {
       });
 
       reader.readAsDataURL(file);
-      const base64Image = await base64Promise;
+      const originalBase64 = await base64Promise;
 
-      setOcrProgress('Analyzing receipt layout with Claude 3.5 Sonnet on backend...');
+      setOcrProgress('Compressing receipt image client-side...');
+      const base64Image = await compressImageBase64(originalBase64, file.type || 'image/jpeg');
+
+      setOcrProgress('Analyzing receipt layout with Claude on backend...');
 
       const response = await fetch('/api/ocr', {
         method: 'POST',
