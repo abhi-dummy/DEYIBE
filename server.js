@@ -25,10 +25,14 @@ app.post('/api/ocr', async (req, res) => {
     const { imageBase64, mediaType } = req.body;
     const apiKey = process.env.VITE_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
 
+    console.log(`[OCR] POST /api/ocr endpoint hit. Media type: ${mediaType}, Base64 payload size: ${imageBase64 ? imageBase64.length : 0} characters.`);
+
     if (!apiKey) {
+      console.error('[OCR] Anthropic API Key is missing on the server.');
       return res.status(500).json({ error: 'Claude API key is not configured on the backend server.' });
     }
 
+    console.log('[OCR] Forwarding request to Anthropic Messages API (claude-3-5-sonnet-latest)...');
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -37,7 +41,7 @@ app.post('/api/ocr', async (req, res) => {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-3-5-haiku-latest',
+        model: 'claude-3-5-sonnet-latest',
         max_tokens: 2000,
         system: `You are an expert receipt parser. Analyze the uploaded receipt image and extract:
 1. Store name (as clean as possible, e.g. "Costco" instead of "COSTCO WHOLESALE #1034")
@@ -84,13 +88,15 @@ Return ONLY a valid JSON object matching the following structure. Do not output 
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error(`[OCR] Anthropic API returned error status: ${response.status}. Response: ${errorText}`);
       return res.status(response.status).json({ error: `Claude API error: ${errorText}` });
     }
 
     const resJson = await response.json();
+    console.log('[OCR] Anthropic Messages API successfully parsed receipt.');
     return res.json(resJson);
   } catch (err) {
-    console.error('Backend OCR error:', err);
+    console.error('[OCR] Exception caught during receipt processing:', err);
     return res.status(500).json({ error: err.message || 'Internal server error during OCR scan.' });
   }
 });

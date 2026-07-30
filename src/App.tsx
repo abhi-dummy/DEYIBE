@@ -1835,7 +1835,7 @@ export default function App() {
       reader.readAsDataURL(file);
       const base64Image = await base64Promise;
 
-      setOcrProgress('Analyzing receipt layout with Claude Haiku on backend...');
+      setOcrProgress('Analyzing receipt layout with Claude 3.5 Sonnet on backend...');
 
       const response = await fetch('/api/ocr', {
         method: 'POST',
@@ -1849,6 +1849,10 @@ export default function App() {
       });
 
       const rawText = await response.text();
+      if (!rawText) {
+        throw new Error('Backend returned an empty response. Verify your server is active and has access to the internet.');
+      }
+
       if (!response.ok) {
         let errMsg = `Server returned status ${response.status}`;
         try {
@@ -1860,7 +1864,12 @@ export default function App() {
         throw new Error(errMsg);
       }
 
-      const resJson = JSON.parse(rawText);
+      let resJson;
+      try {
+        resJson = JSON.parse(rawText);
+      } catch (err) {
+        throw new Error(`Failed to parse server response as JSON. Raw response: ${rawText.slice(0, 150)}...`);
+      }
       const textContent = resJson.content
         .filter((c: any) => c.type === 'text')
         .map((c: any) => c.text)
