@@ -2,6 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+import sgMail from '@sendgrid/mail';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -99,34 +103,38 @@ app.post('/api/send-otp', async (req, res) => {
     const senderEmail = process.env.VITE_SENDGRID_SENDER_EMAIL || process.env.SENDGRID_SENDER_EMAIL || 'meetabhi3105@gmail.com';
 
     if (!sgKey) {
+      console.error('SendGrid key is missing');
       return res.status(500).json({ error: 'SendGrid API key is not configured on the backend server.' });
     }
 
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sgKey}`
-      },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: toEmail }] }],
-        from: { email: senderEmail, name: 'Deyibe Auth' },
-        subject: 'Deyibe Password Reset Code',
-        content: [{
-          type: 'text/plain',
-          value: `Your 6-digit verification code is: ${otpCode}`
-        }]
-      })
-    });
+    sgMail.setApiKey(sgKey);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      return res.status(response.status).json({ error: `SendGrid error: ${errText}` });
-    }
+    const msg = {
+      to: toEmail,
+      from: { email: senderEmail, name: 'Deyibe Auth' },
+      subject: 'Deyibe Verification Code',
+      text: `Your 6-digit verification code is: ${otpCode}`,
+      html: `
+        <div style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; padding: 24px; border-radius: 12px; border: 1px solid rgba(25,23,21,0.08); max-width: 400px; background: #fbfbfa; color: #191715; margin: 0 auto;">
+          <h2 style="font-size: 1.6rem; font-weight: 850; font-family: Georgia, serif; font-style: italic; margin-top: 0; margin-bottom: 12px; border-bottom: 1px solid rgba(25,23,21,0.06); padding-bottom: 8px;">Deyibe</h2>
+          <p style="font-size: 0.9rem; color: #5e5954; line-height: 1.5; margin-bottom: 20px;">To complete your verification, please use the following 6-digit passcode:</p>
+          <div style="font-size: 2.2rem; font-weight: 800; letter-spacing: 6px; padding: 18px; text-align: center; background: #f4f3f0; border-radius: 8px; margin: 20px 0; color: #191715; font-family: monospace;">
+            ${otpCode}
+          </div>
+          <p style="font-size: 0.78rem; color: #8c857e; line-height: 1.4; margin-top: 20px; border-top: 1.5px dashed rgba(25,23,21,0.06); padding-top: 12px;">This code is valid for single use. If you did not trigger this request, you can safely ignore this email.</p>
+        </div>
+      `
+    };
 
+    console.log(`Disbursing OTP email via @sendgrid/mail to ${toEmail}...`);
+    const response = await sgMail.send(msg);
+    console.log(`SendGrid response status: ${response[0].statusCode}`);
     return res.json({ success: true });
   } catch (err) {
-    console.error('Backend Mailer error:', err);
+    console.error('Backend Mailer error details:', err);
+    if (err.response) {
+      console.error('SendGrid API response details:', JSON.stringify(err.response.body));
+    }
     return res.status(500).json({ error: err.message || 'Internal server error sending email.' });
   }
 });

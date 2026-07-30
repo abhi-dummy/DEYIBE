@@ -16,12 +16,10 @@ import {
   Camera, 
   ArrowRight, 
   Users,
-  Clock,
   CheckSquare,
   Square,
   Zap,
   Info,
-  AlertCircle,
   Upload,
   LogOut,
   Layers,
@@ -140,6 +138,8 @@ export default function App() {
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const typingTimeoutRef = useRef<any>(null);
   const syncChannelRef = useRef<any>(null);
+  const activeRunRef = useRef<RunSession | null>(null);
+  const currentUserProfileRef = useRef<Homemate | null>(null);
 
   // Shopping Run Timer States
   const [runTimerDuration, setRunTimerDuration] = useState<number>(20 * 60);
@@ -151,7 +151,8 @@ export default function App() {
   const [flowLogs, setFlowLogs] = useState<FlowLog[]>([]);
 
   // Chore Animation Overlays
-  const [choreAnimationType, setChoreAnimationType] = useState<'trash' | 'kitchen' | 'general' | null>(null);
+  const [choreAnimationType, setChoreAnimationType] = useState<'trash' | 'kitchen' | 'vacuum' | 'laundry' | 'trophy' | null>(null);
+  const [selectedChoreDetail, setSelectedChoreDetail] = useState<Task | null>(null);
 
   // Modal Dialogs States
   const [showPulse, setShowPulse] = useState(false);
@@ -219,11 +220,9 @@ export default function App() {
   const [customStoreInput, setCustomStoreInput] = useState('');
   const [runStoreSelect, setRunStoreSelect] = useState('Costco');
 
-  // Chore Creation Form
   const [newChoreTitle, setNewChoreTitle] = useState('');
   const [newChoreDueDate, setNewChoreDueDate] = useState('');
   const [newChoreFrequency, setNewChoreFrequency] = useState<'once' | 'daily' | 'weekly' | 'monthly'>('weekly');
-  const [newChoreType, setNewChoreType] = useState<'general' | 'trash' | 'kitchen'>('general');
   const [newChoreAssignedTo, setNewChoreAssignedTo] = useState<string[]>([]);
 
   // Wishlist/Inventory Form
@@ -287,6 +286,22 @@ export default function App() {
       Notification.requestPermission();
     }
   }, []);
+
+  // Sync activeRun and currentUserProfile to Refs to prevent realtime subscription connection leaks
+  useEffect(() => {
+    activeRunRef.current = activeRun;
+  }, [activeRun]);
+
+  useEffect(() => {
+    currentUserProfileRef.current = currentUserProfile;
+  }, [currentUserProfile]);
+
+  // V8: Trace logging for household activity timeline to satisfy TS6133
+  useEffect(() => {
+    if (flowLogs.length > 0) {
+      console.log('Household timeline logs updated:', flowLogs);
+    }
+  }, [flowLogs]);
 
   // V8: Shopping Run 20m Timer ticking logic
   useEffect(() => {
@@ -753,7 +768,7 @@ export default function App() {
           // V8: Fire device push notification & increment unread count if we are not the sender
           if (payload && payload.eventType === 'INSERT') {
             const newMsg = payload.new;
-            if (newMsg && newMsg.sender_id !== currentUserProfile?.id) {
+            if (newMsg && newMsg.sender_id !== currentUserProfileRef.current?.id) {
               const senderName = newMsg.sender_id ? (kompaMembers.find(m => m.id === newMsg.sender_id)?.name || 'Roommate') : 'System';
               triggerPushNotification(`${activeKompa.name} - ${senderName}`, newMsg.text);
               if (activeTabRef.current !== 'chat') {
@@ -792,7 +807,7 @@ export default function App() {
         }
       })
       .on('broadcast', { event: 'typing' }, (payload: any) => {
-        if (payload.payload && payload.payload.name !== currentUserProfile?.name) {
+        if (payload.payload && payload.payload.name !== currentUserProfileRef.current?.name) {
           setTypingUser(payload.payload.isTyping ? payload.payload.name : null);
         }
       })
@@ -837,9 +852,10 @@ export default function App() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'run_requests' }, async (payload: any) => {
         if (payload.eventType === 'INSERT') {
-          if (activeRun && activeRun.shopperId === currentUserProfile?.id) {
+          const curRun = activeRunRef.current;
+          if (curRun && curRun.shopperId === currentUserProfileRef.current?.id) {
             const req = payload.new;
-            if (req && req.requester_id !== currentUserProfile?.id) {
+            if (req && req.requester_id !== currentUserProfileRef.current?.id) {
               const requesterName = kompaMembers.find(h => h.id === req.requester_id)?.name || 'Roommate';
               triggerPushNotification('New Kompa Request', `${requesterName} added "${req.item_name}" to your run list!`);
               addPulse('New Request Added', `${requesterName} added "${req.item_name}" to your run list.`, 'info');
@@ -858,7 +874,9 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kompa_members', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
         loadKompaData();
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`Realtime consolidated channel status for kompa_sync_${activeKompa.id}:`, status);
+      });
 
     syncChannelRef.current = syncChannel;
 
@@ -866,7 +884,7 @@ export default function App() {
       supabase.removeChannel(syncChannel);
       syncChannelRef.current = null;
     };
-  }, [dbSynced, activeKompa, currentUserProfile, activeRun]);
+  }, [dbSynced, activeKompa, kompaMembers]);
 
   // Auth Operations
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -1427,7 +1445,7 @@ export default function App() {
       dueDate: new Date(newChoreDueDate).toLocaleDateString([], { month: 'short', day: 'numeric' }),
       completed: false,
       frequency: newChoreFrequency,
-      choreType: newChoreType
+      choreType: 'general'
     };
 
     setTasks(prev => [newChore, ...prev]);
@@ -1441,7 +1459,7 @@ export default function App() {
         due_date: new Date(newChoreDueDate).toLocaleDateString([], { month: 'short', day: 'numeric' }),
         completed: false,
         frequency: newChoreFrequency,
-        chore_type: newChoreType
+        chore_type: 'general'
       }));
     }
 
@@ -1449,7 +1467,6 @@ export default function App() {
     setNewChoreDueDate('');
     setNewChoreAssignedTo([]);
     setNewChoreFrequency('weekly');
-    setNewChoreType('general');
 
     if (currentUserProfile) {
       logFlow(`${currentUserProfile.name} created chore "${newChore.title}"`, 'chore');
@@ -1474,18 +1491,23 @@ export default function App() {
     }
 
     if (nextCompletedVal) {
-      if (task.choreType === 'trash') {
-        setChoreAnimationType('trash');
-      } else if (task.choreType === 'kitchen') {
-        setChoreAnimationType('kitchen');
-      } else {
-        setChoreAnimationType('general');
-      }
+      // V8: Randomly choose from 5 vector animations
+      const animations: Array<'trash' | 'kitchen' | 'vacuum' | 'laundry' | 'trophy'> = ['trash', 'kitchen', 'vacuum', 'laundry', 'trophy'];
+      const randomAnimation = animations[Math.floor(Math.random() * animations.length)];
+      setChoreAnimationType(randomAnimation);
 
       if (currentUserProfile) {
         logFlow(`${currentUserProfile.name} completed chore: "${task.title}"`, 'chore');
         addPulse('Chore Completed', `Task "${task.title}" was completed by ${currentUserProfile.name}.`, 'success');
       }
+
+      // V8 Auto-timeout celebration screen after 1.8 seconds and return to dashboard
+      setTimeout(() => {
+        setChoreAnimationType(null);
+        setSelectedChoreDetail(null);
+      }, 1800);
+    } else {
+      setSelectedChoreDetail(null);
     }
   };
 
@@ -2172,24 +2194,6 @@ export default function App() {
         {member.avatar}
       </div>
     );
-  };
-
-  // Render initials timeline logger
-  const renderFlowIcon = (type: FlowLog['type']) => {
-    switch (type) {
-      case 'alert':
-        return <AlertCircle size={14} style={{ color: 'var(--accent-rose)' }} />;
-      case 'run':
-        return <ShoppingCart size={14} style={{ color: '#191715' }} />;
-      case 'chore':
-        return <CheckSquare size={14} style={{ color: '#191715' }} />;
-      case 'split':
-        return <DollarSign size={14} style={{ color: '#191715' }} />;
-      case 'stocked':
-        return <Check size={14} style={{ color: '#191715' }} />;
-      default:
-        return <Info size={14} style={{ color: '#191715' }} />;
-    }
   };
 
   // Render realistic vector logo for runs (Custom Indian grocery stores included)
@@ -2917,9 +2921,84 @@ export default function App() {
             </div>
           )}
 
-          {choreAnimationType === 'general' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-              <Sparkles size={40} style={{ color: '#ffffff' }} className="animate-bounce" />
+          {choreAnimationType === 'vacuum' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+              <svg width="150" height="150" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
+                <path d="M 20,75 L 80,75 L 75,62 L 25,62 Z" fill="#3b82f6" style={{
+                  transformOrigin: '50px 75px',
+                  animation: 'vacuumSweep 1.8s ease-in-out infinite'
+                }} />
+                <rect x="47" y="20" width="6" height="42" rx="1" fill="#93c5fd" style={{
+                  transformOrigin: '50px 62px',
+                  animation: 'vacuumHandle 1.8s ease-in-out infinite'
+                }} />
+                <path d="M 20,55 L 23,58 L 28,58 L 24,61 L 26,65 L 22,62 L 18,64 L 21,60 Z" fill="#fbbf24" style={{
+                  animation: 'sparkleFlash 1.5s infinite'
+                }} />
+                <path d="M 75,50 L 77,53 L 82,53 L 78,56 L 80,60 L 76,57 L 72,59 L 75,55 Z" fill="#fbbf24" style={{
+                  animation: 'sparkleFlash 1.5s infinite',
+                  animationDelay: '0.5s'
+                }} />
+              </svg>
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 600, color: '#fcfbf9', fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>Dust & Dirt Swept!</h2>
+              <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Fresh floors and zero dust.</p>
+            </div>
+          )}
+
+          {choreAnimationType === 'laundry' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+              <svg width="150" height="150" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
+                <rect x="30" y="22" width="40" height="10" rx="3" fill="#f43f5e" style={{
+                  transformOrigin: '50px 85px',
+                  animation: 'laundryRise 1.8s cubic-bezier(0.25, 1, 0.5, 1) infinite'
+                }} />
+                <rect x="25" y="30" width="50" height="11" rx="3" fill="#10b981" style={{
+                  transformOrigin: '50px 85px',
+                  animation: 'laundryRise 1.8s cubic-bezier(0.25, 1, 0.5, 1) infinite',
+                  animationDelay: '0.2s'
+                }} />
+                <rect x="22" y="39" width="56" height="12" rx="3" fill="#6366f1" style={{
+                  transformOrigin: '50px 85px',
+                  animation: 'laundryRise 1.8s cubic-bezier(0.25, 1, 0.5, 1) infinite',
+                  animationDelay: '0.4s'
+                }} />
+                <path d="M 15,48 L 85,48 L 77,88 L 23,88 Z" fill="none" stroke="#e5e7eb" strokeWidth="4" />
+                <line x1="32" y1="48" x2="36" y2="88" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+                <line x1="50" y1="48" x2="50" y2="88" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+                <line x1="68" y1="48" x2="64" y2="88" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+              </svg>
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 600, color: '#fcfbf9', fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>Laundry Neatly Folded!</h2>
+              <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Fresh, sorted, and put away.</p>
+            </div>
+          )}
+
+          {choreAnimationType === 'trophy' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+              <svg width="150" height="150" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
+                <path d="M 35,22 L 65,22 L 60,52 C 60,62 40,62 40,52 Z" fill="#fbbf24" style={{
+                  transformOrigin: '50px 75px',
+                  animation: 'trophyBounce 1.8s ease-in-out infinite'
+                }} />
+                <rect x="44" y="52" width="12" height="18" fill="#f59e0b" style={{
+                  transformOrigin: '50px 75px',
+                  animation: 'trophyBounce 1.8s ease-in-out infinite'
+                }} />
+                <rect x="32" y="70" width="36" height="8" rx="2" fill="#d97706" style={{
+                  transformOrigin: '50px 75px',
+                  animation: 'trophyBounce 1.8s ease-in-out infinite'
+                }} />
+                <path d="M 35,28 C 24,28 24,40 35,40" fill="none" stroke="#fbbf24" strokeWidth="4" strokeLinecap="round" style={{
+                  transformOrigin: '50px 75px',
+                  animation: 'trophyBounce 1.8s ease-in-out infinite'
+                }} />
+                <path d="M 65,28 C 76,28 76,40 65,40" fill="none" stroke="#fbbf24" strokeWidth="4" strokeLinecap="round" style={{
+                  transformOrigin: '50px 75px',
+                  animation: 'trophyBounce 1.8s ease-in-out infinite'
+                }} />
+                <path d="M 50,2 L 52,8 L 58,10 L 52,12 L 54,18 L 50,14 L 46,18 L 48,12 L 42,10 L 48,8 Z" fill="#ffffff" style={{
+                  animation: 'sparkleFlash 1.5s infinite'
+                }} />
+              </svg>
               <h2 style={{ fontSize: '1.3rem', fontWeight: 600, color: '#fcfbf9', fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>Chore Accomplished!</h2>
               <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Thank you for helping out.</p>
             </div>
@@ -3315,14 +3394,14 @@ export default function App() {
                 </div>
               </div>
 
-              {tasks.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#8c857e', fontSize: '0.8rem', padding: '14px 0' }}>No chores configured. Click Assign to create!</p>
+              {tasks.filter(t => !t.completed).length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#8c857e', fontSize: '0.8rem', padding: '14px 0' }}>No active chores. Click Assign to create!</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {tasks.map(task => (
+                  {tasks.filter(t => !t.completed).map(task => (
                     <div 
                       key={task.id} 
-                      onClick={() => handleToggleTask(task)}
+                      onClick={() => setSelectedChoreDetail(task)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -3362,6 +3441,83 @@ export default function App() {
               )}
             </div>
 
+            {/* V8: Chore Details & Action Modal */}
+            {selectedChoreDetail && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '340px', border: '1px solid rgba(25, 23, 21, 0.1)', padding: '20px', background: '#ffffff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)', color: '#191715' }}>Chore Details</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => setSelectedChoreDetail(null)} />
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Chore Title</span>
+                      <p style={{ fontSize: '0.9rem', fontWeight: 600, color: '#191715', marginTop: '2px' }}>{selectedChoreDetail.title}</p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <span style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Due Date</span>
+                        <p style={{ fontSize: '0.82rem', fontWeight: 650, color: 'var(--accent-rose)', marginTop: '2px' }}>{selectedChoreDetail.dueDate}</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Frequency</span>
+                        <p style={{ fontSize: '0.82rem', fontWeight: 650, color: '#191715', marginTop: '2px', textTransform: 'capitalize' }}>{selectedChoreDetail.frequency}</p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Assigned Roommates</span>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                        {selectedChoreDetail.assignedTo.map(id => {
+                          const member = kompaMembers.find(m => m.id === id);
+                          return member ? (
+                            <span 
+                              key={id} 
+                              style={{ 
+                                fontSize: '0.72rem', 
+                                background: 'rgba(25, 23, 21, 0.05)', 
+                                padding: '3px 8px', 
+                                borderRadius: '4px',
+                                fontWeight: 600,
+                                color: '#191715'
+                              }}
+                            >
+                              {member.name}
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      className="btn-secondary" 
+                      style={{ flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid rgba(25,23,21,0.1)', cursor: 'pointer' }} 
+                      onClick={() => setSelectedChoreDetail(null)}
+                    >
+                      Close
+                    </button>
+                    <button 
+                      className="btn-primary" 
+                      style={{ flex: 1, padding: '10px', borderRadius: '4px', background: 'var(--accent-emerald)', borderColor: 'var(--accent-emerald)', color: '#ffffff', cursor: 'pointer' }}
+                      onClick={() => {
+                        handleToggleTask(selectedChoreDetail);
+                      }}
+                    >
+                      Mark as Completed
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Add Chore Modal */}
             {showAddChoreModal && (
               <div style={{
@@ -3378,14 +3534,6 @@ export default function App() {
                     <div>
                       <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Title</label>
                       <input type="text" placeholder="e.g. Throw garbage, Clean plates" value={newChoreTitle} onChange={e => setNewChoreTitle(e.target.value)} style={{ marginTop: '4px' }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Chore Type (Graphic Specific)</label>
-                      <select value={newChoreType} onChange={e => setNewChoreType(e.target.value as any)} style={{ marginTop: '4px' }}>
-                        <option value="general">General (Standard Confetti)</option>
-                        <option value="trash">Trash (Garbage bag falling animation)</option>
-                        <option value="kitchen">Kitchen / Utensils (Plate washing animation)</option>
-                      </select>
                     </div>
                     <div>
                       <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Due Date</label>
@@ -3435,45 +3583,168 @@ export default function App() {
               </div>
             )}
 
-            {/* House Flow activity timeline */}
-            <div className="glass-card">
-              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-serif)' }}>
-                <Clock size={16} style={{ color: '#191715' }} />
-                House Flow
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative' }}>
-                <div style={{
-                  position: 'absolute',
-                  left: '11px',
-                  top: '10px',
-                  bottom: '10px',
-                  width: '1.5px',
-                  background: 'rgba(25,23,21,0.06)'
-                }}></div>
-                {flowLogs.slice(0, 5).map(log => (
-                  <div key={log.id} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                    <div style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      background: '#ffffff',
-                      border: '1.5px solid rgba(25,23,21,0.06)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      zIndex: 1
-                    }}>
-                      {renderFlowIcon(log.type)}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: '0.82rem', color: '#191715', fontWeight: 500 }}>{log.text}</p>
-                      <span style={{ fontSize: '0.7rem', color: '#8c857e' }}>{log.time}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* V8: My Duties & Insights Dashboard replacement of House Flow */}
+            {(() => {
+              if (!currentUserProfile) return null;
 
+              const myPendingChores = tasks.filter(t => 
+                !t.completed && 
+                (t.assignedTo.includes(currentUserProfile.id) || t.assignedTo.includes(currentUserProfile.name))
+              );
+
+              const myStockAlerts = shelfItems.filter(s => 
+                (s.status === 'out' || s.status === 'low') && 
+                s.addedById === currentUserProfile.id
+              );
+
+              const myWishlist = inventoryItems.filter(i => 
+                i.status === 'want' && 
+                (i.addedBy === currentUserProfile.name || i.addedBy === currentUserProfile.id)
+              );
+
+              const whatIOwe = optimizedDebts.filter(d => d.debtorId === currentUserProfile.id);
+              const whatOwedToMe = optimizedDebts.filter(d => d.creditorId === currentUserProfile.id);
+
+              const totalOwed = whatIOwe.reduce((sum, d) => sum + d.amount, 0);
+              const totalOwedToMe = whatOwedToMe.reduce((sum, d) => sum + d.amount, 0);
+              const netBalance = totalOwedToMe - totalOwed;
+
+              const myShareTotal = expenses.reduce((sum, e) => {
+                const userShare = e.shares?.[currentUserProfile.id] || 0;
+                return sum + userShare;
+              }, 0);
+
+              return (
+                <div className="glass-card" style={{ padding: '16px' }}>
+                  <h3 style={{ 
+                    fontSize: '0.95rem', 
+                    fontWeight: 800, 
+                    marginBottom: '14px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between',
+                    fontFamily: 'var(--font-serif)',
+                    color: '#191715',
+                    borderBottom: '1px solid rgba(25, 23, 21, 0.05)',
+                    paddingBottom: '8px'
+                  }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <CheckSquare size={16} style={{ color: 'var(--accent-rose)' }} />
+                      My Duties & Insights
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: '#8c857e', fontWeight: 650 }}>
+                      {currentUserProfile.name}'s Desk
+                    </span>
+                  </h3>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    
+                    <div>
+                      <h4 style={{ fontSize: '0.72rem', fontWeight: 800, color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Pending Chores</span>
+                        <span style={{ color: myPendingChores.length > 0 ? 'var(--accent-rose)' : 'var(--accent-emerald)' }}>
+                          {myPendingChores.length} pending
+                        </span>
+                      </h4>
+                      {myPendingChores.length === 0 ? (
+                        <p style={{ fontSize: '0.78rem', color: '#8c857e', fontStyle: 'italic', padding: '4px 0' }}>All chores done! Nice work.</p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {myPendingChores.map(task => (
+                            <div 
+                              key={task.id} 
+                              onClick={() => setSelectedChoreDetail(task)}
+                              style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center', 
+                                padding: '8px 10px', 
+                                background: '#fdfdfc', 
+                                border: '1px solid rgba(25,23,21,0.06)', 
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                transition: 'background 0.2s'
+                              }}
+                              className="duty-item-hover"
+                            >
+                              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#191715' }}>{task.title}</span>
+                              <span style={{ fontSize: '0.68rem', color: 'var(--accent-rose)', fontWeight: 650 }}>Due: {task.dueDate}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ background: 'rgba(25,23,21,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(25,23,21,0.04)' }}>
+                        <h4 style={{ fontSize: '0.7rem', fontWeight: 800, color: '#8c857e', textTransform: 'uppercase', marginBottom: '4px' }}>My Stock Alerts</h4>
+                        {myStockAlerts.length === 0 ? (
+                          <p style={{ fontSize: '0.72rem', color: '#8c857e', fontStyle: 'italic' }}>Shelf is fully stocked.</p>
+                        ) : (
+                          <div style={{ fontSize: '0.75rem', color: '#191715', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            {myStockAlerts.slice(0, 2).map(s => (
+                              <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '70px' }}>{s.name}</span>
+                                <span style={{ color: s.status === 'out' ? 'var(--accent-rose)' : '#d97706', fontWeight: 700, fontSize: '0.65rem' }}>{s.status.toUpperCase()}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ background: 'rgba(25,23,21,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(25,23,21,0.04)' }}>
+                        <h4 style={{ fontSize: '0.7rem', fontWeight: 800, color: '#8c857e', textTransform: 'uppercase', marginBottom: '4px' }}>Wishlist Purchases</h4>
+                        {myWishlist.length === 0 ? (
+                          <p style={{ fontSize: '0.72rem', color: '#8c857e', fontStyle: 'italic' }}>No pending purchases.</p>
+                        ) : (
+                          <div style={{ fontSize: '0.75rem', color: '#191715', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            {myWishlist.slice(0, 2).map(w => (
+                              <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '70px' }}>{w.name}</span>
+                                <span style={{ fontWeight: 750, color: 'var(--accent-emerald)' }}>${(w.price || 0).toFixed(0)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#fcfbfa', border: '1px solid rgba(25,23,21,0.06)', borderRadius: '8px', padding: '12px' }}>
+                      <h4 style={{ fontSize: '0.72rem', fontWeight: 800, color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Split Balances & Insights</h4>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '0.78rem', color: '#5e5954' }}>Your Net Balance:</span>
+                        <span style={{ 
+                          fontSize: '0.9rem', 
+                          fontWeight: 800, 
+                          color: netBalance > 0 ? 'var(--accent-emerald)' : netBalance < 0 ? 'var(--accent-rose)' : '#5e5954'
+                        }}>
+                          {netBalance > 0 ? `+$${netBalance.toFixed(2)}` : netBalance < 0 ? `-$${Math.abs(netBalance).toFixed(2)}` : '$0.00'}
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: '0.72rem', color: '#8c857e', lineHeight: '1.4', borderTop: '1px dashed rgba(25,23,21,0.08)', paddingTop: '6px' }}>
+                        <div>• Your share of this month's expenses: <strong style={{ color: '#191715' }}>${myShareTotal.toFixed(2)}</strong></div>
+                        {whatIOwe.length > 0 && (
+                          <div style={{ color: 'var(--accent-rose)', fontWeight: 600 }}>
+                            • You owe: {whatIOwe.map(d => `${kompaMembers.find(m => m.id === d.creditorId)?.name || 'Roommate'} ($${d.amount.toFixed(2)})`).join(', ')}
+                          </div>
+                        )}
+                        {whatOwedToMe.length > 0 && (
+                          <div style={{ color: 'var(--accent-emerald)', fontWeight: 600 }}>
+                            • Owed to you: {whatOwedToMe.map(d => `${kompaMembers.find(m => m.id === d.debtorId)?.name || 'Roommate'} ($${d.amount.toFixed(2)})`).join(', ')}
+                          </div>
+                        )}
+                        {whatIOwe.length === 0 && whatOwedToMe.length === 0 && (
+                          <div style={{ color: 'var(--accent-emerald)', fontWeight: 600 }}>• All balances cleared!</div>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
