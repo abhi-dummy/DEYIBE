@@ -69,6 +69,7 @@ export interface Task {
   completed: boolean;
   frequency: 'once' | 'daily' | 'weekly' | 'monthly';
   choreType?: 'general' | 'trash' | 'kitchen';
+  completedAt?: string;
 }
 
 export interface PulseAlert {

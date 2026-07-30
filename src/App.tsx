@@ -35,7 +35,8 @@ import {
   BarChart2,
   Award,
   Eye,
-  EyeOff
+  EyeOff,
+  User
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { supabase } from './utils/supabaseClient';
@@ -166,9 +167,15 @@ export default function App() {
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
   const [showWishlistDetailsModal, setShowWishlistDetailsModal] = useState<InventoryItem | null>(null);
   const [showExpenseDetailsModal, setShowExpenseDetailsModal] = useState<Expense | null>(null);
-  
-  // V8: Show completed run details popup modal state
   const [showRunDetailsModal, setShowRunDetailsModal] = useState<RunSession | null>(null);
+  
+  // Profile & Dynamic Kompa Success States
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profilePhone, setProfilePhone] = useState('');
+  const [profileName, setProfileName] = useState('');
+  const [deleteConfirmationInput, setDeleteConfirmationInput] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [kompaSuccessPopup, setKompaSuccessPopup] = useState<{ type: 'create' | 'join'; name: string } | null>(null);
 
   // Form Inputs
   const [newShelfName, setNewShelfName] = useState('');
@@ -238,6 +245,19 @@ export default function App() {
   const [ocrProgressPercent, setOcrProgressPercent] = useState<number>(0);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Sync profile details state
+  useEffect(() => {
+    if (currentUserProfile) {
+      setProfileName(currentUserProfile.name);
+    }
+  }, [currentUserProfile]);
+
+  useEffect(() => {
+    if (session?.user) {
+      setProfilePhone(session.user.user_metadata?.phone || '');
+    }
+  }, [session]);
 
   // V8: Scroll to bottom of chat when opening tab or new message arrives
   useEffect(() => {
@@ -472,12 +492,18 @@ export default function App() {
       if (error) throw error;
 
       if (memberships && memberships.length > 0) {
-        const kompaList: Kompa[] = memberships.map((m: any) => ({
-          id: m.kompas.id,
-          name: m.kompas.name,
-          inviteCode: m.kompas.invite_code,
-          ownerId: m.kompas.owner_id
-        }));
+        const kompaList: Kompa[] = memberships
+          .map((m: any) => {
+            if (!m.kompas) return null;
+            return {
+              id: m.kompas.id,
+              name: m.kompas.name,
+              inviteCode: m.kompas.invite_code,
+              ownerId: m.kompas.owner_id
+            };
+          })
+          .filter((k): k is Kompa => k !== null);
+        
         setJoinedKompas(kompaList);
         
         // Hydrate active Kompa from localStorage if valid, else pick first
@@ -579,15 +605,33 @@ export default function App() {
       // Load tasks/chores
       const { data: chores } = await supabase.from('tasks').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
       if (chores) {
-        setTasks(chores.map(t => ({
+        const loadedTasks: Task[] = chores.map(t => ({
           id: t.id,
           title: t.title,
           assignedTo: t.assigned_to || [],
           dueDate: t.due_date,
           completed: t.completed,
           frequency: t.frequency,
-          choreType: t.chore_type
-        })));
+          choreType: t.chore_type,
+          completedAt: t.completed_at || undefined
+        }));
+        setTasks(loadedTasks);
+        
+        // Auto-delete expired completed chores (completed more than 24 hours ago)
+        const expiredIds: string[] = [];
+        const now = Date.now();
+        loadedTasks.forEach(tk => {
+          if (tk.completed && tk.completedAt) {
+            const completedTime = new Date(tk.completedAt).getTime();
+            if (now - completedTime >= 24 * 60 * 60 * 1000) {
+              expiredIds.push(tk.id);
+            }
+          }
+        });
+        if (expiredIds.length > 0) {
+          setTasks(prev => prev.filter(tk => !expiredIds.includes(tk.id)));
+          safeDbWrite(() => supabase.from('tasks').delete().in('id', expiredIds));
+        }
       }
 
       // Load expenses
@@ -756,25 +800,27 @@ export default function App() {
     // Subscribe to all changes on a single consolidated channel to prevent Postgres connection pool exhaustion
     const syncChannel = supabase
       .channel(`kompa_sync_${activeKompa.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages', filter: `kompa_id=eq.${activeKompa.id}` }, async (payload) => {
-        const { data } = await supabase.from('chat_messages').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: true });
-        if (data) {
-          setChatMessages(data.map(c => ({
-            id: c.id,
-            senderId: c.sender_id || 'system',
-            text: c.text,
-            timestamp: new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          })));
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `kompa_id=eq.${activeKompa.id}` }, (payload) => {
+        const newMsg = payload.new;
+        if (newMsg) {
+          // Add to local state immediately (if not already added by current sender client)
+          setChatMessages(prev => {
+            const exists = prev.some(m => m.id === newMsg.id || (m.senderId === newMsg.sender_id && m.text === newMsg.text));
+            if (exists) return prev;
+            return [...prev, {
+              id: newMsg.id,
+              senderId: newMsg.sender_id || 'system',
+              text: newMsg.text,
+              timestamp: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }];
+          });
 
-          // V8: Fire device push notification & increment unread count if we are not the sender
-          if (payload && payload.eventType === 'INSERT') {
-            const newMsg = payload.new;
-            if (newMsg && newMsg.sender_id !== currentUserProfileRef.current?.id) {
-              const senderName = newMsg.sender_id ? (kompaMembers.find(m => m.id === newMsg.sender_id)?.name || 'Roommate') : 'System';
-              triggerPushNotification(`${activeKompa.name} - ${senderName}`, newMsg.text);
-              if (activeTabRef.current !== 'chat') {
-                setUnreadChatCount(prev => prev + 1);
-              }
+          // Trigger push notifications/unread badge if we are not the sender
+          if (newMsg.sender_id !== currentUserProfileRef.current?.id) {
+            const senderName = newMsg.sender_id ? (kompaMembers.find(m => m.id === newMsg.sender_id)?.name || 'Roommate') : 'System';
+            triggerPushNotification(`${activeKompa.name} - ${senderName}`, newMsg.text);
+            if (activeTabRef.current !== 'chat') {
+              setUnreadChatCount(prev => prev + 1);
             }
           }
         }
@@ -789,7 +835,8 @@ export default function App() {
             dueDate: t.due_date,
             completed: t.completed,
             frequency: t.frequency,
-            choreType: t.chore_type
+            choreType: t.chore_type,
+            completedAt: t.completed_at || undefined
           })));
         }
       })
@@ -1102,11 +1149,13 @@ export default function App() {
         setActiveKompa(newK);
         setDbSynced(true);
 
-        setJoinAlertMessage(`${currentUserProfile.name}, you've joined ${newKompa.name}!`);
-        setTimeout(() => setJoinAlertMessage(null), 5000);
+        setKompaSuccessPopup({ type: 'create', name: newKompa.name });
+        setTimeout(() => {
+          setKompaSuccessPopup(null);
+          setShowSettingsModal(false);
+        }, 1800);
 
         setKompaNameInput('');
-        setShowSettingsModal(false);
         fetchUserKompas(currentUserProfile.id);
       }
     } catch (err: any) {
@@ -1167,15 +1216,91 @@ export default function App() {
       setActiveKompa(newK);
       setDbSynced(true);
 
-      alert(`Welcome to ${kompa.name} Kompa!`);
-      setJoinAlertMessage(`${currentUserProfile.name}, you've joined ${kompa.name}!`);
-      setTimeout(() => setJoinAlertMessage(null), 5000);
+      setKompaSuccessPopup({ type: 'join', name: kompa.name });
+      setTimeout(() => {
+        setKompaSuccessPopup(null);
+        setShowSettingsModal(false);
+      }, 1800);
 
       setKompaCodeInput('');
-      setShowSettingsModal(false);
       fetchUserKompas(currentUserProfile.id);
     } catch (err: any) {
       alert(err.message || 'Error joining Kompa.');
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  // Update Profile Details
+  const handleUpdateProfile = async () => {
+    if (!profileName.trim() || !currentUserProfile) return;
+
+    try {
+      setDbLoading(true);
+      
+      // Update local profile row
+      const { error } = await supabase
+        .from('profiles')
+        .update({ name: profileName.trim() })
+        .eq('id', currentUserProfile.id);
+
+      if (error) throw error;
+
+      // Update auth metadata
+      await supabase.auth.updateUser({
+        data: { 
+          name: profileName.trim(),
+          phone: profilePhone.trim()
+        }
+      });
+
+      const updated = { ...currentUserProfile, name: profileName.trim() };
+      setCurrentUserProfile(updated);
+      localStorage.setItem('deyibe_profile', JSON.stringify(updated));
+
+      alert('Profile updated successfully!');
+      setShowProfileModal(false);
+    } catch (err: any) {
+      alert(err.message || 'Error updating profile.');
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  // Delete User Account
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmationInput !== 'delete' || !currentUserProfile) {
+      alert('Please type "delete" to confirm.');
+      return;
+    }
+
+    try {
+      setDbLoading(true);
+
+      // 1. Delete member associations
+      await supabase.from('kompa_members').delete().eq('profile_id', currentUserProfile.id);
+
+      // 2. Delete user profile row
+      await supabase.from('profiles').delete().eq('id', currentUserProfile.id);
+
+      // 3. Clear local storage
+      localStorage.clear();
+
+      // 4. Sign out auth user
+      await supabase.auth.signOut();
+
+      // 5. Reset states
+      setSession(null);
+      setCurrentUserProfile(null);
+      setJoinedKompas([]);
+      setActiveKompa(null);
+      setShowProfileModal(false);
+      setShowDeleteConfirm(false);
+      setDeleteConfirmationInput('');
+
+      alert('Your account and all associated data have been permanently deleted.');
+    } catch (err: any) {
+      alert(err.message || 'Error deleting account.');
     } finally {
       setDbLoading(false);
     }
@@ -1477,18 +1602,34 @@ export default function App() {
   // Toggle Chore Completed
   const handleToggleTask = async (task: Task) => {
     const nextCompletedVal = !task.completed;
+    const completedAtStr = nextCompletedVal ? new Date().toISOString() : null;
 
     setTasks(prev => prev.map(t => {
       if (t.id === task.id) {
-        return { ...t, completed: nextCompletedVal };
+        return { ...t, completed: nextCompletedVal, completedAt: completedAtStr || undefined };
       }
       return t;
     }));
 
     if (dbSynced) {
-      safeDbWrite(() => supabase.from('tasks').update({
-        completed: nextCompletedVal
-      }).eq('id', task.id));
+      try {
+        const { error } = await supabase.from('tasks').update({
+          completed: nextCompletedVal,
+          completed_at: completedAtStr
+        }).eq('id', task.id);
+
+        if (error && error.message.includes('completed_at')) {
+          // Fallback: column doesn't exist yet, only update completed
+          await supabase.from('tasks').update({
+            completed: nextCompletedVal
+          }).eq('id', task.id);
+        }
+      } catch (err) {
+        // Fallback
+        await supabase.from('tasks').update({
+          completed: nextCompletedVal
+        }).eq('id', task.id);
+      }
     }
 
     if (nextCompletedVal) {
@@ -3149,6 +3290,26 @@ export default function App() {
             {pulseAlerts.some(a => !a.read) && <span className="pulse-indicator" style={{ top: '4px', right: '4px' }}></span>}
           </div>
 
+          {/* Profile icon */}
+          {currentUserProfile && (
+            <button 
+              onClick={() => setShowProfileModal(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#191715',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '6px',
+                borderRadius: '50%',
+                cursor: 'pointer'
+              }}
+              title="User Profile"
+            >
+              <User size={18} />
+            </button>
+          )}
+
           {/* Settings icon */}
           {activeKompa && (
             <button 
@@ -3209,6 +3370,210 @@ export default function App() {
             </span>
           </span>
           <X size={14} className="cursor-pointer" onClick={() => setShowDbAlert(false)} style={{ flexShrink: 0 }} />
+        </div>
+      )}
+
+      {/* Profile Modal */}
+      {showProfileModal && currentUserProfile && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999
+        }}>
+          <div className="glass-card" style={{ width: '90%', maxWidth: '380px', maxHeight: '90%', overflowY: 'auto', border: '1px solid rgba(25, 23, 21, 0.1)', padding: '22px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>User Profile</h3>
+              <X size={18} className="cursor-pointer" onClick={() => { setShowProfileModal(false); setShowDeleteConfirm(false); }} />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Profile Avatar and Name */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid rgba(25,23,21,0.06)', paddingBottom: '12px' }}>
+                <div style={{
+                  width: '48px', height: '48px', borderRadius: '50%',
+                  background: currentUserProfile.color || '#191715',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'white', fontWeight: 800, fontSize: '1.1rem'
+                }}>
+                  {currentUserProfile.avatar}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '1rem', color: '#191715' }}>{currentUserProfile.name}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#8c857e' }}>Active Member</div>
+                </div>
+              </div>
+
+              {/* Form Input fields */}
+              <div>
+                <label style={{ fontSize: '0.68rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Display Name</label>
+                <input 
+                  type="text"
+                  value={profileName}
+                  onChange={e => setProfileName(e.target.value)}
+                  style={{
+                    width: '100%', padding: '8px 10px', fontSize: '0.8rem', borderRadius: '4px',
+                    border: '1px solid rgba(25,23,21,0.1)', marginTop: '4px', background: 'transparent'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.68rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email Address (Read-only)</label>
+                <input 
+                  type="text"
+                  value={session?.user?.email || ''}
+                  disabled
+                  style={{
+                    width: '100%', padding: '8px 10px', fontSize: '0.8rem', borderRadius: '4px',
+                    border: '1px solid rgba(25,23,21,0.06)', marginTop: '4px', background: 'rgba(25,23,21,0.03)', color: '#8c857e'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.68rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Contact Phone</label>
+                <input 
+                  type="text"
+                  placeholder="e.g. +1234567890"
+                  value={profilePhone}
+                  onChange={e => setProfilePhone(e.target.value)}
+                  style={{
+                    width: '100%', padding: '8px 10px', fontSize: '0.8rem', borderRadius: '4px',
+                    border: '1px solid rgba(25,23,21,0.1)', marginTop: '4px', background: 'transparent'
+                  }}
+                />
+              </div>
+
+              {/* Joined Kompas list */}
+              <div>
+                <label style={{ fontSize: '0.68rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Your Kompas</label>
+                <div style={{
+                  display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px'
+                }}>
+                  {joinedKompas.length === 0 ? (
+                    <span style={{ fontSize: '0.75rem', color: '#8c857e', fontStyle: 'italic' }}>None joined yet</span>
+                  ) : (
+                    joinedKompas.map(k => (
+                      <span key={k.id} style={{
+                        fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px',
+                        background: 'rgba(25, 23, 21, 0.05)', color: '#191715', fontWeight: 700
+                      }}>
+                        {k.name}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                <button className="btn-primary" style={{ flex: 1, padding: '8px', fontSize: '0.78rem' }} onClick={handleUpdateProfile}>
+                  Save Changes
+                </button>
+              </div>
+
+              {/* Danger Zone: Delete Account */}
+              <div style={{
+                marginTop: '12px', borderTop: '1px dashed rgba(220, 38, 38, 0.2)', paddingTop: '12px'
+              }}>
+                {!showDeleteConfirm ? (
+                  <button 
+                    onClick={() => setShowDeleteConfirm(true)}
+                    style={{
+                      width: '100%', padding: '8px', background: 'rgba(220, 38, 38, 0.05)',
+                      border: '1px solid rgba(220, 38, 38, 0.2)', color: 'var(--accent-rose)',
+                      borderRadius: '4px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    Delete Account
+                  </button>
+                ) : (
+                  <div style={{
+                    background: 'rgba(220, 38, 38, 0.03)', border: '1px solid rgba(220, 38, 38, 0.15)',
+                    padding: '12px', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px'
+                  }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--accent-rose)', fontWeight: 800, textTransform: 'uppercase' }}>
+                      Permanent Deletion Danger
+                    </div>
+                    <p style={{ fontSize: '0.72rem', color: '#5e5954', lineHeight: 1.4 }}>
+                      All your data, profiles, and associations will be permanently removed. This action is irreversible.
+                    </p>
+                    <p style={{ fontSize: '0.72rem', color: '#191715', fontWeight: 700 }}>
+                      Type <span style={{ fontFamily: 'monospace', background: 'rgba(25,23,21,0.08)', padding: '1px 4px', borderRadius: '3px' }}>delete</span> below to confirm:
+                    </p>
+                    <input 
+                      type="text"
+                      placeholder="Type 'delete'"
+                      value={deleteConfirmationInput}
+                      onChange={e => setDeleteConfirmationInput(e.target.value)}
+                      style={{
+                        width: '100%', padding: '6px 8px', fontSize: '0.78rem', borderRadius: '4px',
+                        border: '1px solid rgba(220, 38, 38, 0.3)', background: 'transparent'
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                      <button 
+                        onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmationInput(''); }}
+                        style={{
+                          flex: 1, padding: '6px', border: '1px solid rgba(25,23,21,0.1)',
+                          background: 'white', color: '#191715', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={handleDeleteAccount}
+                        disabled={deleteConfirmationInput !== 'delete'}
+                        style={{
+                          flex: 1, padding: '6px', border: 'none',
+                          background: deleteConfirmationInput === 'delete' ? 'var(--accent-rose)' : 'rgba(25,23,21,0.06)',
+                          color: deleteConfirmationInput === 'delete' ? 'white' : '#8c857e',
+                          borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, cursor: deleteConfirmationInput === 'delete' ? 'pointer' : 'not-allowed'
+                        }}
+                      >
+                        Yes, Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Kompa Success Popup Overlay */}
+      {kompaSuccessPopup && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(12px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100000
+        }}>
+          <div className="glass-card" style={{
+            width: '90%', maxWidth: '320px', border: '1px solid rgba(25, 23, 21, 0.1)',
+            textAlign: 'center', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center'
+          }}>
+            <div style={{
+              width: '48px', height: '48px', borderRadius: '50%',
+              background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Check size={24} style={{ color: 'var(--accent-emerald)' }} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)', color: '#191715' }}>
+                {kompaSuccessPopup.type === 'create' ? 'Group Created!' : 'Joined Group!'}
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: '#8c857e', marginTop: '6px', lineHeight: 1.4 }}>
+                {kompaSuccessPopup.type === 'create' 
+                  ? `Successfully created house space "${kompaSuccessPopup.name}"`
+                  : `Welcome to "${kompaSuccessPopup.name}" Kompa!`}
+              </p>
+            </div>
+            <span style={{ fontSize: '0.68rem', color: '#8c857e', fontWeight: 700 }}>
+              Entering space...
+            </span>
+          </div>
         </div>
       )}
 
@@ -3475,51 +3840,62 @@ export default function App() {
                 </div>
               </div>
 
-              {tasks.filter(t => !t.completed).length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#8c857e', fontSize: '0.8rem', padding: '14px 0' }}>No active chores. Click Assign to create!</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {tasks.filter(t => !t.completed).map(task => (
-                    <div 
-                      key={task.id} 
-                      onClick={() => setSelectedChoreDetail(task)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        padding: '8px 10px',
-                        borderRadius: '6px',
-                        background: '#ffffff',
-                        border: '1px solid rgba(25, 23, 21, 0.06)',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                        opacity: task.completed ? 0.5 : 1
-                      }}
-                    >
-                      {task.completed ? (
-                        <CheckSquare size={16} style={{ color: '#191715' }} />
-                      ) : (
-                        <Square size={16} style={{ color: 'rgba(25,23,21,0.25)' }} />
-                      )}
-                      <div style={{ flex: 1 }}>
-                        <div style={{ 
-                          fontSize: '0.85rem', 
-                          fontWeight: 600,
-                          textDecoration: task.completed ? 'line-through' : 'none',
-                          color: '#191715'
-                        }}>
-                          {task.title}
-                        </div>
-                        <div style={{ fontSize: '0.72rem', color: '#8c857e', marginTop: '1px', display: 'flex', gap: '6px' }}>
-                          <span>Due: {task.dueDate}</span>
-                          <span>•</span>
-                          <span>Assigned: {task.assignedTo.map(id => kompaMembers.find(h => h.id === id)?.name).join(', ')}</span>
+              {(() => {
+                const visibleChores = tasks.filter(t => {
+                  if (!t.completed) return true;
+                  if (!t.completedAt) return false;
+                  const timeDiff = Date.now() - new Date(t.completedAt).getTime();
+                  return timeDiff < 24 * 60 * 60 * 1000; // Keep on board for 24h
+                });
+
+                if (visibleChores.length === 0) {
+                  return <p style={{ textAlign: 'center', color: '#8c857e', fontSize: '0.8rem', padding: '14px 0' }}>No active chores. Click Assign to create!</p>;
+                }
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {visibleChores.map(task => (
+                      <div 
+                        key={task.id} 
+                        onClick={() => setSelectedChoreDetail(task)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          background: '#ffffff',
+                          border: '1px solid rgba(25, 23, 21, 0.06)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          opacity: task.completed ? 0.6 : 1
+                        }}
+                      >
+                        {task.completed ? (
+                          <CheckSquare size={16} style={{ color: 'var(--accent-emerald)' }} />
+                        ) : (
+                          <Square size={16} style={{ color: 'rgba(25,23,21,0.25)' }} />
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ 
+                            fontSize: '0.85rem', 
+                            fontWeight: 600,
+                            textDecoration: task.completed ? 'line-through' : 'none',
+                            color: task.completed ? '#8c857e' : '#191715'
+                          }}>
+                            {task.title}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#8c857e', marginTop: '1px', display: 'flex', gap: '6px' }}>
+                            <span>Due: {task.dueDate}</span>
+                            <span>•</span>
+                            <span>Assigned: {task.assignedTo.map(id => kompaMembers.find(h => h.id === id)?.name || id).join(', ')}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* V8: Chore Details & Action Modal */}
