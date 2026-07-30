@@ -32,18 +32,32 @@ app.post('/api/ocr', async (req, res) => {
       return res.status(500).json({ error: 'Claude API key is not configured on the backend server.' });
     }
 
-    console.log('[OCR] Forwarding request to Anthropic Messages API (claude-3-5-sonnet-latest)...');
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-latest',
-        max_tokens: 2000,
-        system: `You are an expert receipt parser. Analyze the uploaded receipt image and extract:
+    // Active 2026 models fallback chain
+    const models = [
+      'claude-sonnet-4-6',
+      'claude-sonnet-4-5-20250929',
+      'claude-haiku-4-5-20251001',
+      'claude-opus-4-6',
+      'claude-opus-4-7'
+    ];
+
+    let response;
+    let lastError;
+
+    for (const model of models) {
+      try {
+        console.log(`[OCR] Attempting parsing with model: ${model}`);
+        const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: model,
+            max_tokens: 2000,
+            system: `You are an expert receipt parser. Analyze the uploaded receipt image and extract:
 1. Store name (as clean as possible, e.g. "Costco" instead of "COSTCO WHOLESALE #1034")
 2. Individual line items (excluding taxes, subtotals, card details, discounts).
    - For each item, extract the name and final price (after item-specific discounts).
@@ -64,36 +78,48 @@ Return ONLY a valid JSON object matching the following structure. Do not output 
   "tip": 0.00,
   "total": 10.79
 }`,
-        messages: [
-          {
-            role: 'user',
-            content: [
+            messages: [
               {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: mediaType || 'image/jpeg',
-                  data: imageBase64,
-                },
-              },
-              {
-                type: 'text',
-                text: 'Parse this receipt and return the items and totals in JSON format.',
+                role: 'user',
+                content: [
+                  {
+                    type: 'image',
+                    source: {
+                      type: 'base64',
+                      media_type: mediaType || 'image/jpeg',
+                      data: imageBase64,
+                    },
+                  },
+                  {
+                    type: 'text',
+                    text: 'Parse this receipt and return the items and totals in JSON format.',
+                  },
+                ],
               },
             ],
-          },
-        ],
-      })
-    });
+          })
+        });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[OCR] Anthropic API returned error status: ${response.status}. Response: ${errorText}`);
-      return res.status(response.status).json({ error: `Claude API error: ${errorText}` });
+        if (apiResponse.ok) {
+          response = apiResponse;
+          console.log(`[OCR] Parsing succeeded with model: ${model}`);
+          break;
+        } else {
+          const errText = await apiResponse.text();
+          console.warn(`[OCR] Model ${model} failed with status ${apiResponse.status}: ${errText}`);
+          lastError = new Error(`Model ${model} returned error status ${apiResponse.status}: ${errText}`);
+        }
+      } catch (err) {
+        console.error(`[OCR] Exception using model ${model}:`, err.message || err);
+        lastError = err;
+      }
+    }
+
+    if (!response) {
+      return res.status(500).json({ error: `OCR failed. All models failed. Last error: ${lastError?.message || lastError}` });
     }
 
     const resJson = await response.json();
-    console.log('[OCR] Anthropic Messages API successfully parsed receipt.');
     return res.json(resJson);
   } catch (err) {
     console.error('[OCR] Exception caught during receipt processing:', err);
