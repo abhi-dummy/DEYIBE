@@ -518,9 +518,9 @@ export default function App() {
         }
         setDbSynced(true);
       } else {
-        setJoinedKompas([]);
-        setActiveKompa(null);
-        setDbSynced(false);
+        // V8: Only clear if the previous state is also empty to prevent race condition wipes
+        setJoinedKompas(prev => prev.length > 0 ? prev : []);
+        setActiveKompa(prev => prev || null);
       }
     } catch (err) {
       console.warn('Error retrieving user Kompa list:', err);
@@ -977,17 +977,41 @@ export default function App() {
           throw new Error('Invalid verification code.');
         }
 
-        const { data, error } = await supabase.auth.signUp({
-          email: authEmail,
-          password: authPassword,
-          options: {
-            emailRedirectTo: window.location.origin,
-            data: {
-              name: authName.trim() || authEmail.split('@')[0]
+        let signUpError = null;
+        let signUpData = null;
+        try {
+          const res = await supabase.auth.signUp({
+            email: authEmail,
+            password: authPassword,
+            options: {
+              emailRedirectTo: window.location.origin,
+              data: {
+                name: authName.trim() || authEmail.split('@')[0]
+              }
             }
+          });
+          signUpData = res.data;
+          signUpError = res.error;
+        } catch (e: any) {
+          signUpError = e;
+        }
+
+        if (signUpError) {
+          if (signUpError.message?.includes('already registered') || signUpError.message?.includes('already exists') || signUpError.message?.includes('already registered') || signUpError.code === 'user_already_exists') {
+            const confirmSignIn = window.confirm(
+              "An account with this email already exists in our authentication records.\n\n" +
+              "If you previously deleted your profile, please sign in with your password to automatically reactivate your profile as a fresh account. Would you like to switch to Login now?"
+            );
+            if (confirmSignIn) {
+              setAuthMode('login');
+              setAuthOtpCode('');
+            }
+            return;
           }
-        });
-        if (error) throw error;
+          throw signUpError;
+        }
+        
+        const data = signUpData;
         
         if (data?.session) {
           setSession(data.session);
@@ -1156,7 +1180,9 @@ export default function App() {
         }, 1800);
 
         setKompaNameInput('');
-        fetchUserKompas(currentUserProfile.id);
+        setTimeout(() => {
+          if (currentUserProfile) fetchUserKompas(currentUserProfile.id);
+        }, 800);
       }
     } catch (err: any) {
       alert(err.message || 'Error creating Kompa.');
@@ -1223,7 +1249,9 @@ export default function App() {
       }, 1800);
 
       setKompaCodeInput('');
-      fetchUserKompas(currentUserProfile.id);
+      setTimeout(() => {
+        if (currentUserProfile) fetchUserKompas(currentUserProfile.id);
+      }, 800);
     } catch (err: any) {
       alert(err.message || 'Error joining Kompa.');
     } finally {
@@ -1237,11 +1265,15 @@ export default function App() {
 
     try {
       setDbLoading(true);
+      const nextAvatar = profileName.trim().slice(0, 2).toUpperCase();
       
       // Update local profile row
       const { error } = await supabase
         .from('profiles')
-        .update({ name: profileName.trim() })
+        .update({ 
+          name: profileName.trim(),
+          avatar: nextAvatar
+        })
         .eq('id', currentUserProfile.id);
 
       if (error) throw error;
@@ -1254,7 +1286,11 @@ export default function App() {
         }
       });
 
-      const updated = { ...currentUserProfile, name: profileName.trim() };
+      const updated = { 
+        ...currentUserProfile, 
+        name: profileName.trim(),
+        avatar: nextAvatar
+      };
       setCurrentUserProfile(updated);
       localStorage.setItem('deyibe_profile', JSON.stringify(updated));
 
