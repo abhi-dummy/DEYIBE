@@ -234,7 +234,8 @@ export default function App() {
   // OCR Scan states
   const [ocrScanning, setOcrScanning] = useState(false);
   const [ocrResult, setOcrResult] = useState<any | null>(null);
-  const [ocrProgress, setOcrProgress] = useState<string>('');
+  const [splitTabSubView, setSplitTabSubView] = useState<'calendar' | '3month'>('calendar');
+  const [ocrProgressPercent, setOcrProgressPercent] = useState<number>(0);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -1776,9 +1777,21 @@ export default function App() {
   const triggerOCRScan = (store: 'Costco' | 'Walmart') => {
     setOcrScanning(true);
     setOcrResult(null);
-    setOcrProgress('Running parser...');
+    setOcrProgressPercent(0);
+
+    const interval = setInterval(() => {
+      setOcrProgressPercent(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          return 100;
+        }
+        return prev + 10;
+      });
+    }, 150);
 
     setTimeout(() => {
+      clearInterval(interval);
+      setOcrProgressPercent(100);
       setOcrScanning(false);
       if (store === 'Costco') {
         setOcrResult({
@@ -1809,7 +1822,7 @@ export default function App() {
           total: 19.99
         });
       }
-    }, 2000);
+    }, 1800);
   };
 
   // Compress base64 image client-side to prevent payload-too-large (413) blocks on production proxies like Render
@@ -1850,16 +1863,19 @@ export default function App() {
     });
   };
 
-  // OCR Custom Receipt upload (V12: Express Backend Claude API OCR parser)
+  // Custom Receipt upload (Express Backend API parser)
   const handleCustomImageOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setOcrScanning(true);
     setOcrResult(null);
-    setOcrProgress('Reading receipt using Claude API backend...');
+    setOcrProgressPercent(0);
+
+    let progressInterval: any;
 
     try {
+      setOcrProgressPercent(5);
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve, reject) => {
         reader.onload = () => {
@@ -1873,10 +1889,22 @@ export default function App() {
       reader.readAsDataURL(file);
       const originalBase64 = await base64Promise;
 
-      setOcrProgress('Compressing receipt image client-side...');
+      setOcrProgressPercent(15);
       const base64Image = await compressImageBase64(originalBase64, file.type || 'image/jpeg');
 
-      setOcrProgress('Analyzing receipt layout with Claude on backend...');
+      setOcrProgressPercent(25);
+      
+      // Smooth visual progression ticking up to 98%
+      progressInterval = setInterval(() => {
+        setOcrProgressPercent(prev => {
+          if (prev >= 98) {
+            clearInterval(progressInterval);
+            return 98;
+          }
+          const increment = prev < 60 ? 6 : prev < 85 ? 2 : 1;
+          return prev + increment;
+        });
+      }, 250);
 
       const response = await fetch('/api/ocr', {
         method: 'POST',
@@ -1920,6 +1948,9 @@ export default function App() {
       const jsonStr = jsonMatch ? jsonMatch[0] : textContent;
       const parsedOcr = JSON.parse(jsonStr);
 
+      clearInterval(progressInterval);
+      setOcrProgressPercent(100);
+
       setOcrResult({
         merchant: parsedOcr.store_name || 'Scanned Receipt',
         date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
@@ -1933,10 +1964,10 @@ export default function App() {
       });
     } catch (err: any) {
       console.error(err);
-      alert(`OCR Scan failed: ${err.message || err}`);
+      alert(`Receipt scan failed: ${err.message || err}`);
     } finally {
+      if (progressInterval) clearInterval(progressInterval);
       setOcrScanning(false);
-      setOcrProgress('');
     }
   };
 
@@ -1979,7 +2010,7 @@ export default function App() {
 
     const newExpense: Expense = {
       id: `e_${Date.now()}`,
-      title: `OCR Scan: ${ocrResult.merchant}`,
+      title: `Bill Scan: ${ocrResult.merchant}`,
       amount: Number(finalTotal.toFixed(2)),
       payerId: currentUserProfile.id,
       splitMethod: 'custom',
@@ -1996,7 +2027,7 @@ export default function App() {
     if (dbSynced) {
       safeDbWrite(() => supabase.from('expenses').insert({
         kompa_id: activeKompa.id,
-        title: `OCR Scan: ${ocrResult.merchant}`,
+        title: `Bill Scan: ${ocrResult.merchant}`,
         amount: Number(finalTotal.toFixed(2)),
         payer_id: currentUserProfile.id,
         split_method: 'custom',
@@ -2017,7 +2048,7 @@ export default function App() {
       return s;
     }));
 
-    logFlow(`Logged OCR receipt split for ${ocrResult.merchant}`, 'split');
+    logFlow(`Logged receipt split for ${ocrResult.merchant}`, 'split');
     addPulse('Receipt Processed', `Receipt cost of $${ocrResult.total.toFixed(2)} logged.`, 'success');
   };
 
@@ -4621,10 +4652,6 @@ export default function App() {
 
                 {selectedInsightUser && (() => {
                   const data = getRoommateInsights(selectedInsightUser);
-                  
-                  // Monthly Trend Mock Data values
-                  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-                  const monthValues = [120, 230, 180, 240, 190, Math.min(100, Math.max(10, Math.round(data.totalSpent / 2)))];
 
                   return (
                     <div>
@@ -4662,38 +4689,13 @@ export default function App() {
                           </span>
                         </div>
                       </div>
-
-                      {/* Interactive SVG Bar chart rendering monthly trends */}
-                      <div style={{ marginTop: '14px' }}>
-                        <label style={{ fontSize: '0.68rem', fontWeight: 800, color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          6-Month Spending Trend
-                        </label>
-                        
-                        <div className="chart-bar-container">
-                          {monthValues.map((val, idx) => {
-                            const pct = Math.min(100, Math.max(10, (val / 300) * 100));
-                            return (
-                              <div 
-                                key={idx} 
-                                className="chart-bar" 
-                                style={{ height: `${pct}%` }}
-                              >
-                                <span className="chart-bar-value">${val}</span>
-                                <span className="chart-bar-label">{months[idx]}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div style={{ height: '14px' }}></div>
-                      </div>
-
                     </div>
                   );
                 })()}
               </div>
             )}
 
-            {/* Monthly Calendar View */}
+            {/* Toggleable Schedule Calendar & Last 3 Months Analysis Card */}
             {(() => {
               const year = currentMonthDate.getFullYear();
               const month = currentMonthDate.getMonth();
@@ -4711,93 +4713,294 @@ export default function App() {
                 cells.push(d);
               }
 
+              // Monthly offset matching function
+              const matchMonthOffset = (dateStr: string, offset: number): boolean => {
+                const date = new Date(Date.parse(dateStr));
+                if (isNaN(date.getTime())) return false;
+                const targetDate = new Date();
+                targetDate.setDate(1);
+                targetDate.setMonth(targetDate.getMonth() - offset);
+                return date.getMonth() === targetDate.getMonth() && date.getFullYear() === targetDate.getFullYear();
+              };
+
               return (
                 <div className="glass-card" style={{ padding: '14px', marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800, color: '#191715' }} onClick={() => setCurrentMonthDate(new Date(year, month - 1, 1))}>◀</button>
-                    <h4 style={{ fontWeight: 800, fontSize: '0.9rem', color: '#191715', fontFamily: 'var(--font-serif)' }}>{monthName} {year}</h4>
-                    <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800, color: '#191715' }} onClick={() => setCurrentMonthDate(new Date(year, month + 1, 1))}>▶</button>
+                  {/* Top Toggle Switch */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', background: 'rgba(25, 23, 21, 0.04)', padding: '3px', borderRadius: '6px' }}>
+                      <button 
+                        type="button"
+                        onClick={() => setSplitTabSubView('calendar')} 
+                        style={{
+                          padding: '4px 10px', fontSize: '0.72rem', fontWeight: 800, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          background: splitTabSubView === 'calendar' ? 'white' : 'transparent',
+                          color: splitTabSubView === 'calendar' ? '#191715' : '#8c857e',
+                          boxShadow: splitTabSubView === 'calendar' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        Calendar
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setSplitTabSubView('3month')} 
+                        style={{
+                          padding: '4px 10px', fontSize: '0.72rem', fontWeight: 800, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          background: splitTabSubView === '3month' ? 'white' : 'transparent',
+                          color: splitTabSubView === '3month' ? '#191715' : '#8c857e',
+                          boxShadow: splitTabSubView === '3month' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        Last 3 Months Spend
+                      </button>
+                    </div>
+
+                    {splitTabSubView === '3month' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.65rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase' }}>Scope:</span>
+                        <select 
+                          value={selectedInsightUser || ''} 
+                          onChange={e => setSelectedInsightUser(e.target.value)}
+                          style={{ border: '1px solid rgba(25,23,21,0.1)', background: 'transparent', padding: '3px', fontSize: '0.72rem', fontWeight: 700, borderRadius: '4px', outline: 'none' }}
+                        >
+                          {kompaMembers.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="calendar-grid">
-                    {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => (
-                      <div key={idx} className="calendar-header-cell">{day}</div>
-                    ))}
+                  {splitTabSubView === 'calendar' ? (
+                    /* Render Calendar Sub-View */
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800, color: '#191715' }} onClick={() => setCurrentMonthDate(new Date(year, month - 1, 1))}>◀</button>
+                        <h4 style={{ fontWeight: 800, fontSize: '0.9rem', color: '#191715', fontFamily: 'var(--font-serif)' }}>{monthName} {year}</h4>
+                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800, color: '#191715' }} onClick={() => setCurrentMonthDate(new Date(year, month + 1, 1))}>▶</button>
+                      </div>
 
-                    {cells.map((dayNum, idx) => {
-                      if (dayNum === null) {
-                        return <div key={idx} style={{ aspectRatio: '0.9' }} />;
-                      }
+                      <div className="calendar-grid">
+                        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => (
+                          <div key={idx} className="calendar-header-cell">{day}</div>
+                        ))}
 
-                      const dateStr = `${monthName.slice(0, 3)} ${dayNum}`;
-                      const dayExpenses = expenses.filter(e => {
-                        const parsedDate = new Date(e.date);
-                        return parsedDate.getDate() === dayNum && parsedDate.getMonth() === month;
+                        {cells.map((dayNum, idx) => {
+                          if (dayNum === null) {
+                            return <div key={idx} style={{ aspectRatio: '0.9' }} />;
+                          }
+
+                          const dateStr = `${monthName.slice(0, 3)} ${dayNum}`;
+                          const dayExpenses = expenses.filter(e => {
+                            const parsedDate = new Date(e.date);
+                            return parsedDate.getDate() === dayNum && parsedDate.getMonth() === month;
+                          });
+
+                          const dayTotal = dayExpenses.reduce((sum, e) => sum + e.amount, 0);
+                          const uniquePayers = Array.from(new Set(dayExpenses.map(e => e.payerId)));
+
+                          return (
+                            <div 
+                              key={idx} 
+                              className="calendar-cell"
+                              onClick={() => {
+                                if (dayExpenses.length > 0) {
+                                  setSelectedCalendarDate(dateStr);
+                                }
+                              }}
+                            >
+                              <div className="calendar-day-num">{dayNum}</div>
+                              
+                              {dayTotal > 0 && (
+                                <div style={{ textAlign: 'right' }}>
+                                  <div className="calendar-cell-amount" style={{ fontSize: '0.62rem', fontWeight: 800 }}>${dayTotal.toFixed(0)}</div>
+                                  <div className="calendar-cell-avatars">
+                                    {uniquePayers.map(pid => {
+                                      const payer = kompaMembers.find(h => h.id === pid);
+                                      return payer ? (
+                                        <div key={pid} style={{ width: '10px', height: '10px', borderRadius: '50%', background: payer.color || '#191715', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.45rem', color: 'white', fontWeight: 900 }}>
+                                          {payer.name[0]}
+                                        </div>
+                                      ) : null;
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {selectedCalendarDate && (() => {
+                        const dayNum = parseInt(selectedCalendarDate.split(' ')[1]);
+                        const dayExpenses = expenses.filter(e => {
+                          const parsed = new Date(e.date);
+                          return parsed.getDate() === dayNum && parsed.getMonth() === month;
+                        });
+
+                        return (
+                          <div style={{ marginTop: '16px', background: 'rgba(25, 23, 21, 0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(25, 23, 21, 0.08)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                              <h4 style={{ fontWeight: 800, fontSize: '0.8rem', color: '#191715' }}> Purchases on {selectedCalendarDate}</h4>
+                              <span style={{ cursor: 'pointer', fontSize: '0.8rem', fontWeight: 800 }} onClick={() => setSelectedCalendarDate(null)}>✖</span>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {dayExpenses.map(exp => (
+                                <div key={exp.id} onClick={() => { setShowExpenseDetailsModal(exp); setSelectedCalendarDate(null); }} style={{ background: 'white', padding: '8px', borderRadius: '6px', border: '1px solid rgba(25, 23, 21, 0.06)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div>
+                                    <div style={{ fontSize: '0.78rem', fontWeight: 700 }}>{exp.title}</div>
+                                    <span style={{ fontSize: '0.65rem', color: '#8c857e' }}>Paid by {kompaMembers.find(h => h.id === exp.payerId)?.name}</span>
+                                  </div>
+                                  <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--accent-rose)' }}>${exp.amount.toFixed(2)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    /* Render Dynamic Last 3 Months Spend Analysis Sub-View */
+                    (() => {
+                      const targetUser = selectedInsightUser || currentUserProfile?.id;
+                      const userObj = kompaMembers.find(m => m.id === targetUser);
+                      if (!userObj) return <p style={{ fontSize: '0.8rem', color: '#8c857e', textAlign: 'center' }}>Select a user to analyze.</p>;
+
+                      const monthOffsets = [2, 1, 0];
+                      const monthsData = monthOffsets.map(offset => {
+                        const d = new Date();
+                        d.setDate(1);
+                        d.setMonth(d.getMonth() - offset);
+                        const monthLabel = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+                        const monthShort = d.toLocaleString('default', { month: 'short' });
+
+                        // 1. Amount spent by user
+                        const spentByYou = expenses
+                          .filter(e => e.payerId === targetUser && matchMonthOffset(e.date, offset))
+                          .reduce((sum, e) => sum + e.amount, 0);
+
+                        // 2. User's actual share of expenses
+                        const actualSpent = expenses
+                          .filter(e => matchMonthOffset(e.date, offset))
+                          .reduce((sum, e) => sum + (e.shares[targetUser] || 0), 0);
+
+                        // 3. Amount user owes to others
+                        const amountOwed = expenses
+                          .filter(e => e.payerId !== targetUser && matchMonthOffset(e.date, offset))
+                          .reduce((sum, e) => sum + (e.shares[targetUser] || 0), 0);
+
+                        // 4. Wishlist items added by this user
+                        let wishlistTotal = 0;
+                        inventoryItems.forEach(item => {
+                          if (item.price && (item.addedBy === userObj.name || item.addedBy === targetUser)) {
+                            const timestamp = parseInt(item.id.replace('inv_', ''));
+                            if (!isNaN(timestamp)) {
+                              const itemDate = new Date(timestamp);
+                              if (itemDate.getMonth() === d.getMonth() && itemDate.getFullYear() === d.getFullYear()) {
+                                wishlistTotal += item.price;
+                              }
+                            }
+                          }
+                        });
+
+                        // 5. Amount other members owe this user
+                        let othersOweYou = 0;
+                        expenses
+                          .filter(e => e.payerId === targetUser && matchMonthOffset(e.date, offset))
+                          .forEach(e => {
+                            Object.entries(e.shares).forEach(([memberId, shareAmount]) => {
+                              if (memberId !== targetUser) {
+                                othersOweYou += shareAmount;
+                              }
+                            });
+                          });
+
+                        return {
+                          monthLabel,
+                          monthShort,
+                          spentByYou,
+                          actualSpent,
+                          amountOwed,
+                          wishlistTotal,
+                          othersOweYou
+                        };
                       });
 
-                      const dayTotal = dayExpenses.reduce((sum, e) => sum + e.amount, 0);
-                      const uniquePayers = Array.from(new Set(dayExpenses.map(e => e.payerId)));
-
                       return (
-                        <div 
-                          key={idx} 
-                          className="calendar-cell"
-                          onClick={() => {
-                            if (dayExpenses.length > 0) {
-                              setSelectedCalendarDate(dateStr);
-                            }
-                          }}
-                        >
-                          <div className="calendar-day-num">{dayNum}</div>
-                          
-                          {dayTotal > 0 && (
-                            <div style={{ textAlign: 'right' }}>
-                              <div className="calendar-cell-amount" style={{ fontSize: '0.62rem', fontWeight: 800 }}>${dayTotal.toFixed(0)}</div>
-                              <div className="calendar-cell-avatars">
-                                {uniquePayers.map(pid => {
-                                  const payer = kompaMembers.find(h => h.id === pid);
-                                  return payer ? (
-                                    <div key={pid} style={{ width: '10px', height: '10px', borderRadius: '50%', background: payer.color || '#191715', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.45rem', color: 'white', fontWeight: 900 }}>
-                                      {payer.name[0]}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          {monthsData.map((mData, idx) => {
+                            const maxVal = Math.max(10, mData.spentByYou, mData.actualSpent, mData.amountOwed, mData.wishlistTotal, mData.othersOweYou);
+                            return (
+                              <div key={idx} style={{ background: 'rgba(25,23,21,0.01)', border: '1px solid rgba(25,23,21,0.04)', padding: '12px', borderRadius: '8px' }}>
+                                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#191715', marginBottom: '8px', borderBottom: '1px solid rgba(25,23,21,0.03)', paddingBottom: '4px' }}>
+                                  {mData.monthLabel}
+                                </div>
+                                
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.72rem' }}>
+                                  {/* 1. Paid by User */}
+                                  <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#5e5954', marginBottom: '2px' }}>
+                                      <span>Amount Paid by {userObj.name}:</span>
+                                      <strong style={{ color: '#191715' }}>${mData.spentByYou.toFixed(2)}</strong>
                                     </div>
-                                  ) : null;
-                                })}
+                                    <div style={{ height: '4px', background: 'rgba(25,23,21,0.04)', borderRadius: '2px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${(mData.spentByYou / maxVal) * 100}%`, background: '#191715', transition: 'width 0.3s ease' }} />
+                                    </div>
+                                  </div>
+
+                                  {/* 2. Actual Share */}
+                                  <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#5e5954', marginBottom: '2px' }}>
+                                      <span>Actual Cost ({userObj.name}'s Share):</span>
+                                      <strong style={{ color: '#191715' }}>${mData.actualSpent.toFixed(2)}</strong>
+                                    </div>
+                                    <div style={{ height: '4px', background: 'rgba(25,23,21,0.04)', borderRadius: '2px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${(mData.actualSpent / maxVal) * 100}%`, background: 'var(--accent-emerald)', transition: 'width 0.3s ease' }} />
+                                    </div>
+                                  </div>
+
+                                  {/* 3. Owed to Others */}
+                                  <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#5e5954', marginBottom: '2px' }}>
+                                      <span>Owed to Others (Pending Debts):</span>
+                                      <strong style={{ color: '#191715' }}>${mData.amountOwed.toFixed(2)}</strong>
+                                    </div>
+                                    <div style={{ height: '4px', background: 'rgba(25,23,21,0.04)', borderRadius: '2px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${(mData.amountOwed / maxVal) * 100}%`, background: 'var(--accent-rose)', transition: 'width 0.3s ease' }} />
+                                    </div>
+                                  </div>
+
+                                  {/* 4. Others Owe You */}
+                                  <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#5e5954', marginBottom: '2px' }}>
+                                      <span>Owed to {userObj.name} (By Roommates):</span>
+                                      <strong style={{ color: '#191715' }}>${mData.othersOweYou.toFixed(2)}</strong>
+                                    </div>
+                                    <div style={{ height: '4px', background: 'rgba(25,23,21,0.04)', borderRadius: '2px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${(mData.othersOweYou / maxVal) * 100}%`, background: 'var(--accent-gold)', transition: 'width 0.3s ease' }} />
+                                    </div>
+                                  </div>
+
+                                  {/* 5. Wishlist Items */}
+                                  <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#5e5954', marginBottom: '2px' }}>
+                                      <span>Wishlist items added:</span>
+                                      <strong style={{ color: '#191715' }}>${mData.wishlistTotal.toFixed(2)}</strong>
+                                    </div>
+                                    <div style={{ height: '4px', background: 'rgba(25,23,21,0.04)', borderRadius: '2px', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${(mData.wishlistTotal / maxVal) * 100}%`, background: '#2563eb', transition: 'width 0.3s ease' }} />
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            );
+                          })}
                         </div>
                       );
-                    })}
-                  </div>
-
-                  {selectedCalendarDate && (() => {
-                    const dayNum = parseInt(selectedCalendarDate.split(' ')[1]);
-                    const dayExpenses = expenses.filter(e => {
-                      const parsed = new Date(e.date);
-                      return parsed.getDate() === dayNum && parsed.getMonth() === month;
-                    });
-
-                    return (
-                      <div style={{ marginTop: '16px', background: 'rgba(25, 23, 21, 0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(25, 23, 21, 0.08)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <h4 style={{ fontWeight: 800, fontSize: '0.8rem', color: '#191715' }}> Purchases on {selectedCalendarDate}</h4>
-                          <span style={{ cursor: 'pointer', fontSize: '0.8rem', fontWeight: 800 }} onClick={() => setSelectedCalendarDate(null)}>✖</span>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          {dayExpenses.map(exp => (
-                            <div key={exp.id} onClick={() => { setShowExpenseDetailsModal(exp); setSelectedCalendarDate(null); }} style={{ background: 'white', padding: '8px', borderRadius: '6px', border: '1px solid rgba(25, 23, 21, 0.06)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div>
-                                <div style={{ fontSize: '0.78rem', fontWeight: 700 }}>{exp.title}</div>
-                                <span style={{ fontSize: '0.65rem', color: '#8c857e' }}>Paid by {kompaMembers.find(h => h.id === exp.payerId)?.name}</span>
-                              </div>
-                              <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--accent-rose)' }}>${exp.amount.toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
+                    })()
+                  )}
                 </div>
               );
             })()}
@@ -4931,7 +5134,7 @@ export default function App() {
               </div>
             )}
 
-            {/* OCR Scanner Modal */}
+            {/* Scanner Modal */}
             {showOCRModal && (
               <div style={{
                 position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -4940,7 +5143,7 @@ export default function App() {
               }}>
                 <div className="glass-card" style={{ width: '90%', maxWidth: '380px', maxHeight: '90%', overflowY: 'auto', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>OCR Receipt Scan</h3>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Scan Bill</h3>
                     <X size={18} className="cursor-pointer" onClick={() => { setShowOCRModal(false); setOcrResult(null); }} />
                   </div>
                   
@@ -4954,22 +5157,41 @@ export default function App() {
                         <Camera size={22} style={{ color: '#191715' }} />
                       </div>
                       {ocrScanning ? (
-                        <div>
-                          <RefreshCw size={20} className="animate-spin" style={{ color: '#191715', margin: '0 auto 8px' }} />
-                          <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>{ocrProgress}</p>
-                          <p style={{ fontSize: '0.72rem', color: '#8c857e', marginTop: '2px' }}>Executing item classification OCR</p>
+                        <div style={{ width: '100%', padding: '10px 0' }}>
+                          <RefreshCw size={20} className="animate-spin" style={{ color: '#191715', margin: '0 auto 12px' }} />
+                          <p style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '8px', color: '#191715' }}>Scanning bill...</p>
+                          <div style={{
+                            width: '100%',
+                            height: '6px',
+                            background: 'rgba(25, 23, 21, 0.06)',
+                            borderRadius: '3px',
+                            overflow: 'hidden',
+                            position: 'relative',
+                            marginBottom: '6px'
+                          }}>
+                            <div style={{
+                              height: '100%',
+                              width: `${ocrProgressPercent}%`,
+                              background: 'var(--accent-emerald)',
+                              transition: 'width 0.2s ease-out',
+                              borderRadius: '3px'
+                            }}></div>
+                          </div>
+                          <span style={{ fontSize: '0.72rem', color: '#8c857e', fontWeight: 700 }}>
+                            {ocrProgressPercent}% Complete
+                          </span>
                         </div>
                       ) : (
                         <div style={{ width: '100%' }}>
-                          <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>Analyze printed receipts</p>
-                          <p style={{ fontSize: '0.75rem', color: '#8c857e', marginTop: '2px', marginBottom: '12px' }}>Upload a file or choose dummy presets</p>
+                          <p style={{ fontWeight: 700, fontSize: '0.88rem' }}>Scan physical receipt or invoice</p>
+                          <p style={{ fontSize: '0.75rem', color: '#8c857e', marginTop: '2px', marginBottom: '12px' }}>Upload a file or choose preset bills</p>
                           
                           <label className="btn-secondary" style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                             padding: '10px', cursor: 'pointer', marginBottom: '12px', fontSize: '0.8rem', borderRadius: '4px'
                           }}>
                             <Upload size={16} />
-                            Upload Receipt Image
+                            Upload Bill Image
                             <input type="file" accept="image/*" onChange={handleCustomImageOCR} style={{ display: 'none' }} />
                           </label>
 
@@ -4990,8 +5212,8 @@ export default function App() {
                         <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>${ocrResult.total.toFixed(2)}</span>
                       </div>
 
-                      {/* V8 Interactive OCR item level roommate assign editor */}
-                      <span style={{ fontSize: '0.7rem', fontWeight: 750, textTransform: 'uppercase', color: '#8c857e' }}>Extracted Scans & Splits</span>
+                      {/* Item level roommate assign editor */}
+                      <span style={{ fontSize: '0.7rem', fontWeight: 750, textTransform: 'uppercase', color: '#8c857e' }}>Allocated Items & Splits</span>
                       
                       <div className="ocr-editor-list">
                         {ocrResult.items.map((item: any, idx: number) => {
