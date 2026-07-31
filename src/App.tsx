@@ -580,15 +580,33 @@ export default function App() {
       // Load shelf items
       const { data: shelf } = await supabase.from('shelf_items').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
       if (shelf) {
-        setShelfItems(shelf.map(s => ({
+        const loadedShelf: ShelfItem[] = shelf.map(s => ({
           id: s.id,
           name: s.name,
           status: s.status,
           priority: s.priority,
           addedById: s.added_by || '1',
           visibility: s.visibility || [],
-          timestamp: 'Synced'
-        })));
+          timestamp: 'Synced',
+          restockedAt: s.restocked_at || undefined
+        }));
+        setShelfItems(loadedShelf);
+
+        // Auto-delete expired stocked items (stocked more than 24 hours ago)
+        const expiredShelfIds: string[] = [];
+        const now = Date.now();
+        loadedShelf.forEach(s => {
+          if (s.status === 'stocked' && s.restockedAt) {
+            const restockedTime = new Date(s.restockedAt).getTime();
+            if (now - restockedTime >= 24 * 60 * 60 * 1000) {
+              expiredShelfIds.push(s.id);
+            }
+          }
+        });
+        if (expiredShelfIds.length > 0) {
+          setShelfItems(prev => prev.filter(s => !expiredShelfIds.includes(s.id)));
+          safeDbWrite(() => supabase.from('shelf_items').delete().in('id', expiredShelfIds));
+        }
       }
 
       // Load chat messages
@@ -850,13 +868,33 @@ export default function App() {
             priority: s.priority,
             addedById: s.added_by || '1',
             visibility: s.visibility || [],
-            timestamp: 'Synced'
+            timestamp: 'Synced',
+            restockedAt: s.restocked_at || undefined
           })));
         }
       })
       .on('broadcast', { event: 'typing' }, (payload: any) => {
         if (payload.payload && payload.payload.name !== currentUserProfileRef.current?.name) {
           setTypingUser(payload.payload.isTyping ? payload.payload.name : null);
+        }
+      })
+      .on('broadcast', { event: 'chat_msg' }, (payload: any) => {
+        const newMsg = payload.payload;
+        if (newMsg && newMsg.sender_id !== currentUserProfileRef.current?.id) {
+          setChatMessages(prev => {
+            const exists = prev.some(m => m.id === newMsg.id || (m.senderId === newMsg.sender_id && m.text === newMsg.text));
+            if (exists) return prev;
+            return [...prev, {
+              id: newMsg.id,
+              senderId: newMsg.sender_id || 'system',
+              text: newMsg.text,
+              timestamp: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }];
+          });
+          
+          if (activeTabRef.current !== 'chat') {
+            setUnreadChatCount(prev => prev + 1);
+          }
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
@@ -1419,12 +1457,13 @@ export default function App() {
 
     // Clear typing timeout and broadcast typing stopped
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    const typingChannel = supabase.channel(`typing_${activeKompa.id}`);
-    typingChannel.send({
-      type: 'broadcast',
-      event: 'typing',
-      payload: { name: currentUserProfile.name, isTyping: false }
-    });
+    if (syncChannelRef.current) {
+      syncChannelRef.current.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { name: currentUserProfile.name, isTyping: false }
+      });
+    }
 
     const newMessage: ChatMessage = {
       id: `m_${Date.now()}`,
@@ -1435,6 +1474,20 @@ export default function App() {
     setChatMessages(prev => [...prev, newMessage]);
     const originalText = chatInput;
     setChatInput('');
+
+    // V8: Broadcast message to other channel members instantly
+    if (syncChannelRef.current) {
+      syncChannelRef.current.send({
+        type: 'broadcast',
+        event: 'chat_msg',
+        payload: {
+          id: newMessage.id,
+          sender_id: currentUserProfile.id,
+          text: originalText,
+          created_at: new Date().toISOString()
+        }
+      });
+    }
 
     if (dbSynced) {
       safeDbWrite(() => supabase.from('chat_messages').insert({
@@ -4334,7 +4387,6 @@ export default function App() {
                       </span>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', color: '#8c857e', marginTop: '6px', fontWeight: 500 }}>
                         <span>by {kompaMembers.find(h => h.id === item.addedById)?.name}</span>
-                        <span>{item.timestamp}</span>
                       </div>
                     </div>
                   </div>
