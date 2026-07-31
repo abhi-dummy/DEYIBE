@@ -33,6 +33,7 @@ export interface ShelfItem {
   visibility: string[]; // user ids
   timestamp: string;
   restockedAt?: string; // for the 48 hour countdown
+  stockedBy?: string;
 }
 
 export interface RunRequest {

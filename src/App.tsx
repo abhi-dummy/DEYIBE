@@ -225,7 +225,6 @@ export default function App() {
 
   const [newRequestName, setNewRequestName] = useState('');
   const [customStoreInput, setCustomStoreInput] = useState('');
-  const [runStoreSelect, setRunStoreSelect] = useState('Costco');
 
   const [newChoreTitle, setNewChoreTitle] = useState('');
   const [newChoreDueDate, setNewChoreDueDate] = useState('');
@@ -588,7 +587,8 @@ export default function App() {
           addedById: s.added_by || '1',
           visibility: s.visibility || [],
           timestamp: 'Synced',
-          restockedAt: s.restocked_at || undefined
+          restockedAt: s.restocked_at || undefined,
+          stockedBy: s.stocked_by || undefined
         }));
         setShelfItems(loadedShelf);
 
@@ -869,7 +869,8 @@ export default function App() {
             addedById: s.added_by || '1',
             visibility: s.visibility || [],
             timestamp: 'Synced',
-            restockedAt: s.restocked_at || undefined
+            restockedAt: s.restocked_at || undefined,
+            stockedBy: s.stocked_by || undefined
           })));
         }
       })
@@ -896,6 +897,58 @@ export default function App() {
             setUnreadChatCount(prev => prev + 1);
           }
         }
+      })
+      .on('broadcast', { event: 'run_start' }, (payload: any) => {
+        setActiveRun(payload.payload);
+      })
+      .on('broadcast', { event: 'run_cancel' }, () => {
+        setActiveRun(null);
+      })
+      .on('broadcast', { event: 'run_checkout' }, () => {
+        setActiveRun(null);
+        loadKompaData();
+      })
+      .on('broadcast', { event: 'run_request_add' }, (payload: any) => {
+        const { request } = payload.payload;
+        setActiveRun(prev => {
+          if (!prev) return null;
+          const exists = prev.requests.some(r => r.id === request.id);
+          if (exists) return prev;
+          return {
+            ...prev,
+            requests: [...prev.requests, request]
+          };
+        });
+      })
+      .on('broadcast', { event: 'run_request_status_update' }, (payload: any) => {
+        const { reqId, status, price, replacementName, replacementPrice } = payload.payload;
+        setActiveRun(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            requests: prev.requests.map(r => r.id === reqId ? { ...r, status, price, replacementName, replacementPrice } : r)
+          };
+        });
+      })
+      .on('broadcast', { event: 'run_request_edit' }, (payload: any) => {
+        const { reqId, newName } = payload.payload;
+        setActiveRun(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            requests: prev.requests.map(r => r.id === reqId ? { ...r, itemName: newName } : r)
+          };
+        });
+      })
+      .on('broadcast', { event: 'run_request_delete' }, (payload: any) => {
+        const { reqId } = payload.payload;
+        setActiveRun(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            requests: prev.requests.filter(r => r.id !== reqId)
+          };
+        });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
         const { data } = await supabase
@@ -1601,22 +1654,41 @@ export default function App() {
     if (!currentUserProfile || !activeKompa) return;
     const isCurrentlyStocked = item.status === 'stocked';
     const newStatus = isCurrentlyStocked ? 'low' : 'stocked';
+    const stockedByVal = newStatus === 'stocked' ? currentUserProfile.name : undefined;
+    const restockedAtVal = newStatus === 'stocked' ? new Date().toISOString() : undefined;
     
     setShelfItems(prev => prev.map(i => {
       if (i.id === item.id) {
         return { 
           ...i, 
           status: newStatus,
-          restockedAt: newStatus === 'stocked' ? new Date().toISOString() : undefined 
+          restockedAt: restockedAtVal,
+          stockedBy: stockedByVal
         };
       }
       return i;
     }));
 
     if (dbSynced) {
-      safeDbWrite(() => supabase.from('shelf_items').update({
-        status: newStatus
-      }).eq('id', item.id));
+      try {
+        const { error } = await supabase.from('shelf_items').update({
+          status: newStatus,
+          restocked_at: restockedAtVal,
+          stocked_by: stockedByVal
+        }).eq('id', item.id);
+
+        if (error && error.message.includes('stocked_by')) {
+          await supabase.from('shelf_items').update({
+            status: newStatus,
+            restocked_at: restockedAtVal
+          }).eq('id', item.id);
+        }
+      } catch (err) {
+        await supabase.from('shelf_items').update({
+          status: newStatus,
+          restocked_at: restockedAtVal
+        }).eq('id', item.id);
+      }
     }
 
     if (newStatus === 'stocked') {
@@ -1776,6 +1848,13 @@ export default function App() {
       requests: []
     };
     setActiveRun(newRun);
+    if (syncChannelRef.current) {
+      syncChannelRef.current.send({
+        type: 'broadcast',
+        event: 'run_start',
+        payload: newRun
+      });
+    }
     logFlow(`${currentUserProfile.name} initiated shopping run at ${store}`, 'run');
   };
 
@@ -1860,7 +1939,106 @@ export default function App() {
       ...activeRun,
       requests: [...activeRun.requests, newReq]
     });
+    if (syncChannelRef.current) {
+      syncChannelRef.current.send({
+        type: 'broadcast',
+        event: 'run_request_add',
+        payload: { runId: activeRun.id, request: newReq }
+      });
+    }
     setNewRequestName('');
+  };
+
+  // Edit Run Request
+  const handleEditRunRequest = async (reqId: string, currentName: string) => {
+    const newName = prompt('Edit item name:', currentName);
+    if (newName && newName.trim() && newName.trim() !== currentName) {
+      setActiveRun(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          requests: prev.requests.map(r => r.id === reqId ? { ...r, itemName: newName.trim() } : r)
+        };
+      });
+
+      if (syncChannelRef.current) {
+        syncChannelRef.current.send({
+          type: 'broadcast',
+          event: 'run_request_edit',
+          payload: { reqId, newName: newName.trim() }
+        });
+      }
+
+      if (dbSynced) {
+        await supabase.from('run_requests').update({ item_name: newName.trim() }).eq('id', reqId);
+      }
+    }
+  };
+
+  // Delete Run Request
+  const handleDeleteRunRequest = async (reqId: string) => {
+    const confirmDel = window.confirm('Delete this request?');
+    if (confirmDel) {
+      setActiveRun(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          requests: prev.requests.filter(r => r.id !== reqId)
+        };
+      });
+
+      if (syncChannelRef.current) {
+        syncChannelRef.current.send({
+          type: 'broadcast',
+          event: 'run_request_delete',
+          payload: { reqId }
+        });
+      }
+
+      if (dbSynced) {
+        await supabase.from('run_requests').delete().eq('id', reqId);
+      }
+    }
+  };
+
+  // Add Suggested stock item directly to run
+  const handleAddSuggestedToRun = async (itemName: string) => {
+    if (!activeRun || !currentUserProfile) return;
+    
+    let requestId = `req_${Date.now()}`;
+    if (dbSynced) {
+      const { data } = await supabase
+        .from('run_requests')
+        .insert({
+          run_id: activeRun.id,
+          item_name: itemName,
+          requester_id: currentUserProfile.id,
+          status: 'pending'
+        })
+        .select()
+        .single();
+      if (data) requestId = data.id;
+    }
+
+    const newReq: RunRequest = {
+      id: requestId,
+      itemName,
+      requesterId: currentUserProfile.id,
+      status: 'pending'
+    };
+
+    setActiveRun({
+      ...activeRun,
+      requests: [...activeRun.requests, newReq]
+    });
+
+    if (syncChannelRef.current) {
+      syncChannelRef.current.send({
+        type: 'broadcast',
+        event: 'run_request_add',
+        payload: { runId: activeRun.id, request: newReq }
+      });
+    }
   };
 
   // Update Run Request status
@@ -1888,6 +2066,14 @@ export default function App() {
         return r;
       })
     });
+
+    if (syncChannelRef.current) {
+      syncChannelRef.current.send({
+        type: 'broadcast',
+        event: 'run_request_status_update',
+        payload: { reqId, status, price, replacementName, replacementPrice }
+      });
+    }
   };
 
   // Complete Run & Settle Checkout
@@ -1904,16 +2090,39 @@ export default function App() {
         .eq('id', activeRun.id);
 
       for (const r of foundRequests) {
-        safeDbWrite(() => supabase.from('shelf_items').insert({
-          kompa_id: activeKompa.id,
-          name: r.status === 'replaced' ? (r.replacementName || r.itemName) : r.itemName,
-          status: 'stocked',
-          priority: 'medium',
-          added_by: r.requesterId
-        }));
+        safeDbWrite(async () => {
+          try {
+            const { error } = await supabase.from('shelf_items').insert({
+              kompa_id: activeKompa.id,
+              name: r.status === 'replaced' ? (r.replacementName || r.itemName) : r.itemName,
+              status: 'stocked',
+              priority: 'medium',
+              added_by: r.requesterId,
+              stocked_by: kompaMembers.find(m => m.id === activeRun.shopperId)?.name
+            });
+            if (error && error.message.includes('stocked_by')) {
+              await supabase.from('shelf_items').insert({
+                kompa_id: activeKompa.id,
+                name: r.status === 'replaced' ? (r.replacementName || r.itemName) : r.itemName,
+                status: 'stocked',
+                priority: 'medium',
+                added_by: r.requesterId
+              });
+            }
+          } catch (e) {
+            await supabase.from('shelf_items').insert({
+              kompa_id: activeKompa.id,
+              name: r.status === 'replaced' ? (r.replacementName || r.itemName) : r.itemName,
+              status: 'stocked',
+              priority: 'medium',
+              added_by: r.requesterId
+            });
+          }
+        });
       }
     }
 
+    const shopperObj = kompaMembers.find(m => m.id === activeRun.shopperId);
     const newShelfAdditions = foundRequests.map(r => ({
       id: `s_${Date.now()}_${r.id}`,
       name: r.status === 'replaced' ? (r.replacementName || r.itemName) : r.itemName,
@@ -1921,7 +2130,9 @@ export default function App() {
       addedById: r.requesterId,
       priority: 'medium' as const,
       visibility: [],
-      timestamp: 'Just now'
+      timestamp: 'Just now',
+      restockedAt: new Date().toISOString(),
+      stockedBy: shopperObj ? shopperObj.name : undefined
     }));
 
     setShelfItems(prev => [...newShelfAdditions, ...prev]);
@@ -1982,6 +2193,13 @@ export default function App() {
     setRunTimerDuration(20 * 60);
     setActiveRun(null);
     setNotifyState('idle');
+    if (syncChannelRef.current) {
+      syncChannelRef.current.send({
+        type: 'broadcast',
+        event: 'run_checkout',
+        payload: {}
+      });
+    }
     confetti({
       particleCount: 80,
       spread: 60
@@ -2001,6 +2219,13 @@ export default function App() {
     setRunTimerDuration(20 * 60);
     setActiveRun(null);
     setNotifyState('idle');
+    if (syncChannelRef.current) {
+      syncChannelRef.current.send({
+        type: 'broadcast',
+        event: 'run_cancel',
+        payload: {}
+      });
+    }
   };
 
   // OCR presets triggers with actual scanned Pleasanton Costco bill data
@@ -4342,6 +4567,9 @@ export default function App() {
                   const isPublic = !item.visibility || item.visibility.length === 0;
                   const isOwnPrivate = item.visibility && item.visibility.includes(currentUserProfile?.id || '');
                   return isPublic || isOwnPrivate;
+                }).sort((a, b) => {
+                  const order = { 'out': 0, 'low': 1, 'stocked': 2 };
+                  return order[a.status] - order[b.status];
                 }).map(item => {
                   const isPrivate = item.visibility && item.visibility.includes(currentUserProfile?.id || '');
                   return (
@@ -4385,8 +4613,13 @@ export default function App() {
                       <span className={`shelf-status-pill ${item.status}`}>
                         {item.status === 'stocked' ? 'Stocked' : item.status === 'low' ? 'Low Stock' : 'Out of stock'}
                       </span>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', color: '#8c857e', marginTop: '6px', fontWeight: 500 }}>
-                        <span>by {kompaMembers.find(h => h.id === item.addedById)?.name}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.7rem', color: '#8c857e', marginTop: '6px', fontWeight: 500 }}>
+                        <span>by {kompaMembers.find(h => h.id === item.addedById)?.name || 'Someone'}</span>
+                        {item.status === 'stocked' && item.stockedBy && (
+                          <span style={{ fontSize: '0.65rem', fontStyle: 'italic', color: 'var(--accent-emerald)', fontWeight: 700 }}>
+                            Stocked by {item.stockedBy}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -4725,41 +4958,40 @@ export default function App() {
                 </p>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  
-                  {/* Grocery stores selection */}
-                  <div>
-                    <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Select Retailer</label>
-                    <select value={runStoreSelect} onChange={e => setRunStoreSelect(e.target.value)} style={{ marginTop: '4px' }}>
-                      <option value="Costco">Costco Wholesale</option>
-                      <option value="Walmart">Walmart Supercenter</option>
-                      <option value="Patel Brothers">Patel Brothers (Indian)</option>
-                      <option value="Apna Bazar">Apna Bazar (Indian)</option>
-                      <option value="Subzi Mandi">Subzi Mandi (Indian)</option>
-                      <option value="Trader Joe's">Trader Joe's</option>
-                    </select>
-                  </div>
-
-                  <button className="btn-primary" style={{ borderRadius: '4px', marginTop: '4px' }} onClick={() => handleStartRun(runStoreSelect)}>
-                    Start {runStoreSelect} Run
-                  </button>
-                  
-                  <div style={{ textAlign: 'center', fontSize: '0.7rem', fontWeight: 800, color: '#8c857e', margin: '6px 0' }}>OR</div>
-
-                  {/* V7: Custom run configuration fields with autocomplete search suggestions drop panel */}
+                  {/* Curved Autocomplete Search Input */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative' }}>
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>
+                      Where are you shopping?
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                       <input 
                         type="text" 
-                        placeholder="Enter custom store (e.g. Vijetha)..." 
+                        placeholder="Search or enter store name (e.g. Costco, Walmart)..." 
                         value={customStoreInput} 
                         onChange={e => setCustomStoreInput(e.target.value)} 
                         onFocus={() => setShowStoreDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowStoreDropdown(false), 200)}
-                        style={{ padding: '9px', fontSize: '0.85rem' }}
+                        onBlur={() => setTimeout(() => setShowStoreDropdown(false), 250)}
+                        style={{ 
+                          padding: '10px 18px', 
+                          fontSize: '0.85rem', 
+                          borderRadius: '24px', 
+                          border: '1px solid rgba(25, 23, 21, 0.15)',
+                          outline: 'none',
+                          width: '100%',
+                          background: 'white'
+                        }}
                       />
                       <button 
                         className="btn-primary" 
-                        style={{ padding: '9px 12px', fontSize: '0.78rem', flexShrink: 0, borderRadius: '4px' }}
+                        disabled={!customStoreInput.trim()}
+                        style={{ 
+                          padding: '10px 20px', 
+                          fontSize: '0.8rem', 
+                          borderRadius: '24px', 
+                          flexShrink: 0,
+                          cursor: customStoreInput.trim() ? 'pointer' : 'not-allowed',
+                          opacity: customStoreInput.trim() ? 1 : 0.6
+                        }}
                         onClick={() => {
                           if (customStoreInput.trim()) {
                             handleStartRun(customStoreInput.trim());
@@ -4767,25 +4999,43 @@ export default function App() {
                           }
                         }}
                       >
-                        + Custom
+                        Start Run
                       </button>
                     </div>
 
                     {/* V8 Autofill Search Suggestion Dropdown */}
-                    {showStoreDropdown && recentStores.length > 0 && (
-                      <div className="store-autocomplete-dropdown">
-                        {recentStores
+                    {showStoreDropdown && (
+                      <div className="store-autocomplete-dropdown" style={{
+                        position: 'absolute', top: '100%', left: 0, right: 0,
+                        zIndex: 99999, background: 'white', borderRadius: '12px',
+                        boxShadow: '0 8px 30px rgba(0,0,0,0.08)', border: '1px solid rgba(25, 23, 21, 0.08)',
+                        maxHeight: '180px', overflowY: 'auto', marginTop: '6px', textAlign: 'left'
+                      }}>
+                        {Array.from(new Set([
+                          ...recentStores,
+                          "Costco Wholesale",
+                          "Walmart",
+                          "Trader Joe's",
+                          "Patel Brothers",
+                          "Apna Bazar",
+                          "Subzi Mandi"
+                        ]))
                           .filter(s => s.toLowerCase().includes(customStoreInput.toLowerCase()))
                           .map((store, i) => (
                             <div 
                               key={i} 
                               className="store-autocomplete-item"
-                              onClick={() => {
+                              style={{
+                                padding: '10px 16px', fontSize: '0.82rem', color: '#191715',
+                                cursor: 'pointer', borderBottom: '1px solid rgba(25,23,21,0.03)',
+                                background: 'transparent', transition: 'background 0.15s ease'
+                              }}
+                              onMouseDown={() => {
                                 setCustomStoreInput(store);
                                 setShowStoreDropdown(false);
                               }}
                             >
-                              {store} (recently went)
+                              {store}
                             </div>
                           ))
                         }
@@ -4868,90 +5118,167 @@ export default function App() {
 
                 {/* Active Run Requests list */}
                 <div className="glass-card" style={{ padding: '14px' }}>
-                  <h4 style={{ fontSize: '0.85rem', fontWeight: 800, marginBottom: '10px', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Run requests</h4>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: 800, marginBottom: '10px', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>
+                    {activeRun.shopperId === currentUserProfile?.id ? 'Your Shopping List (To-Do)' : 'Active Run requests'}
+                  </h4>
                   
                   {activeRun.requests.length === 0 ? (
                     <p style={{ textAlign: 'center', color: '#8c857e', padding: '14px 0', fontSize: '0.8rem' }}>
-                      No items requested. Send request below.
+                      No items requested.
                     </p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                      {activeRun.requests.map(req => (
-                        <div 
-                          key={req.id} 
-                          style={{
-                            padding: '10px', borderRadius: '6px', 
-                            background: '#ffffff', border: '1px solid rgba(25, 23, 21, 0.06)',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#191715' }}>
-                              {req.itemName}
+                      {activeRun.requests.map(req => {
+                        const isOwnRequest = req.requesterId === currentUserProfile?.id;
+                        const isShopper = activeRun.shopperId === currentUserProfile?.id;
+                        
+                        return (
+                          <div 
+                            key={req.id} 
+                            style={{
+                              padding: '10px', borderRadius: '6px', 
+                              background: '#ffffff', border: '1px solid rgba(25, 23, 21, 0.06)',
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                            }}
+                          >
+                            <div style={{ textAlign: 'left' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#191715' }}>
+                                {req.itemName}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: '#8c857e', marginTop: '1px' }}>
+                                Requested by: {kompaMembers.find(h => h.id === req.requesterId)?.name || 'Someone'}
+                              </div>
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: '#8c857e', marginTop: '1px' }}>
-                              Requested by: {kompaMembers.find(h => h.id === req.requesterId)?.name}
+                            
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              {isShopper ? (
+                                // Shopper / Runner interface: Found, Replace, Out
+                                req.status === 'pending' || req.status === 'searching' ? (
+                                  <>
+                                    <button 
+                                      style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'var(--accent-emerald)', color: 'white', cursor: 'pointer' }}
+                                      onClick={() => {
+                                        const pr = prompt('Enter checkout price ($) for this item:', '5.00');
+                                        if (pr !== null) handleUpdateRunRequestStatus(req.id, 'found', parseFloat(pr) || 0);
+                                      }}
+                                    >
+                                      Found
+                                    </button>
+                                    <button 
+                                      style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'var(--accent-amber)', color: 'white', cursor: 'pointer' }}
+                                      onClick={() => {
+                                        const replName = prompt('Enter replacement item name:');
+                                        const replPrice = prompt('Enter replacement item price ($):');
+                                        if (replName && replPrice) {
+                                          handleUpdateRunRequestStatus(req.id, 'replaced', undefined, replName, parseFloat(replPrice) || 0);
+                                        }
+                                      }}
+                                    >
+                                      Replace
+                                    </button>
+                                    <button 
+                                      style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(25, 23, 21, 0.05)', color: '#191715', cursor: 'pointer' }}
+                                      onClick={() => handleUpdateRunRequestStatus(req.id, 'out')}
+                                    >
+                                      Out
+                                    </button>
+                                  </>
+                                ) : (
+                                  <span style={{
+                                    fontSize: '0.7rem', fontWeight: 800, padding: '3px 6px', borderRadius: '4px',
+                                    background: req.status === 'found' ? 'rgba(16, 185, 129, 0.1)' : req.status === 'replaced' ? 'rgba(180, 83, 9, 0.1)' : 'rgba(220, 38, 38, 0.1)',
+                                    color: req.status === 'found' ? '#10b981' : req.status === 'replaced' ? '#b45309' : '#dc2626',
+                                    textTransform: 'uppercase'
+                                  }}>
+                                    {req.status} {req.price && `($${req.price})`} {req.replacementPrice && `(Repl: $${req.replacementPrice})`}
+                                  </span>
+                                )
+                              ) : (
+                                // Regular User interface: Edit and Delete only for their own requests
+                                <>
+                                  {isOwnRequest && (req.status === 'pending' || req.status === 'searching') ? (
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                      <button 
+                                        style={{ padding: '4px 8px', fontSize: '0.7rem', borderRadius: '4px', border: '1px solid rgba(25,23,21,0.1)', background: 'white', color: '#191715', cursor: 'pointer' }}
+                                        onClick={() => handleEditRunRequest(req.id, req.itemName)}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button 
+                                        style={{ padding: '4px 8px', fontSize: '0.7rem', borderRadius: '4px', border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.05)', color: 'var(--accent-rose)', cursor: 'pointer' }}
+                                        onClick={() => handleDeleteRunRequest(req.id)}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span style={{
+                                      fontSize: '0.7rem', fontWeight: 800, padding: '3px 6px', borderRadius: '4px',
+                                      background: req.status === 'found' ? 'rgba(16, 185, 129, 0.1)' : req.status === 'replaced' ? 'rgba(180, 83, 9, 0.1)' : req.status === 'pending' ? 'rgba(25,23,21,0.05)' : 'rgba(220, 38, 38, 0.1)',
+                                      color: req.status === 'found' ? '#10b981' : req.status === 'replaced' ? '#b45309' : req.status === 'pending' ? '#8c857e' : '#dc2626',
+                                      textTransform: 'uppercase'
+                                    }}>
+                                      {req.status}
+                                    </span>
+                                  )}
+                                </>
+                              )}
                             </div>
                           </div>
-                          
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            {req.status === 'pending' || req.status === 'searching' ? (
-                              <>
-                                <button 
-                                  style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'var(--accent-emerald)', color: 'white' }}
-                                  onClick={() => {
-                                    const pr = prompt('Enter checkout price ($) for this item:', '5.00');
-                                    if (pr !== null) handleUpdateRunRequestStatus(req.id, 'found', parseFloat(pr) || 0);
-                                  }}
-                                >
-                                  Found
-                                </button>
-                                <button 
-                                  style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'var(--accent-rose)', color: 'white' }}
-                                  onClick={() => {
-                                    const replName = prompt('Enter replacement item name:');
-                                    const replPrice = prompt('Enter replacement item price ($):');
-                                    if (replName && replPrice) {
-                                      handleUpdateRunRequestStatus(req.id, 'replaced', undefined, replName, parseFloat(replPrice) || 0);
-                                    }
-                                  }}
-                                >
-                                  Replace
-                                </button>
-                                <button 
-                                  style={{ padding: '5px 8px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', background: 'rgba(25, 23, 21, 0.05)', color: '#191715' }}
-                                  onClick={() => handleUpdateRunRequestStatus(req.id, 'out')}
-                                >
-                                  Out
-                                </button>
-                              </>
-                            ) : (
-                              <span style={{
-                                fontSize: '0.7rem', fontWeight: 800, padding: '3px 6px', borderRadius: '4px',
-                                background: req.status === 'found' ? 'rgba(16, 185, 129, 0.1)' : req.status === 'replaced' ? 'rgba(180, 83, 9, 0.1)' : 'rgba(220, 38, 38, 0.1)',
-                                color: req.status === 'found' ? '#10b981' : req.status === 'replaced' ? '#b45309' : '#dc2626',
-                                textTransform: 'uppercase'
-                              }}>
-                                {req.status} {req.price && `($${req.price})`} {req.replacementPrice && `(Repl: $${req.replacementPrice})`}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
-                  {/* Add new run request */}
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <input 
-                      type="text" 
-                      placeholder="Request item..." 
-                      value={newRequestName} 
-                      onChange={e => setNewRequestName(e.target.value)} 
-                      style={{ padding: '9px' }}
-                    />
-                    <button className="btn-primary" style={{ padding: '0 12px', fontSize: '0.8rem', borderRadius: '4px' }} onClick={handleAddRunRequest}>Request</button>
-                  </div>
+                  {/* Add request only visible for non-shopper users */}
+                  {activeRun.shopperId !== currentUserProfile?.id && (
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
+                      <input 
+                        type="text" 
+                        placeholder="Request item..." 
+                        value={newRequestName} 
+                        onChange={e => setNewRequestName(e.target.value)} 
+                        style={{ padding: '9px', borderRadius: '4px', border: '1px solid rgba(25,23,21,0.12)', width: '100%', background: 'transparent' }}
+                      />
+                      <button className="btn-primary" style={{ padding: '0 12px', fontSize: '0.8rem', borderRadius: '4px' }} onClick={handleAddRunRequest}>Request</button>
+                    </div>
+                  )}
+
+                  {/* Shopper interface: Suggested additions photogrid */}
+                  {activeRun.shopperId === currentUserProfile?.id && (
+                    <div style={{ marginTop: '16px', borderTop: '1px dashed rgba(25,23,21,0.1)', paddingTop: '14px' }}>
+                      <h4 style={{ fontSize: '0.78rem', fontWeight: 800, marginBottom: '8px', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>
+                        Suggested (Running Low/Out)
+                      </h4>
+                      {shelfItems.filter(s => s.status === 'low' || s.status === 'out').length === 0 ? (
+                        <p style={{ fontSize: '0.74rem', color: '#8c857e', fontStyle: 'italic', textAlign: 'left' }}>All items fully stocked!</p>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '6px' }}>
+                          {shelfItems
+                            .filter(s => s.status === 'low' || s.status === 'out')
+                            .slice(0, 6)
+                            .map(item => (
+                              <div 
+                                key={item.id}
+                                onClick={() => handleAddSuggestedToRun(item.name)}
+                                style={{
+                                  padding: '8px', borderRadius: '6px', cursor: 'pointer',
+                                  background: item.status === 'out' ? 'rgba(220, 38, 38, 0.03)' : 'rgba(180, 83, 9, 0.03)',
+                                  border: `1px solid ${item.status === 'out' ? 'rgba(220, 38, 38, 0.12)' : 'rgba(180, 83, 9, 0.12)'}`,
+                                  textAlign: 'center', transition: 'all 0.15s ease', position: 'relative'
+                                }}
+                              >
+                                <div style={{ fontWeight: 700, fontSize: '0.75rem', color: '#191715', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+                                <div style={{ fontSize: '0.58rem', color: item.status === 'out' ? '#dc2626' : '#b45309', fontWeight: 700, marginTop: '2px', textTransform: 'uppercase' }}>
+                                  {item.status === 'out' ? 'Out' : 'Low'}
+                                </div>
+                              </div>
+                            ))
+                          }
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
