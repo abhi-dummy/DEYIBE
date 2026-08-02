@@ -3245,6 +3245,37 @@ export default function App() {
                   maxLength={6}
                   style={{ marginTop: '4px' }}
                 />
+                
+                {authMode === 'verify_signup_otp' && (
+                  <div style={{
+                    marginTop: '8px', padding: '10px 12px', borderRadius: '6px',
+                    background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)',
+                    fontSize: '0.74rem', color: '#b45309', lineHeight: 1.4, textAlign: 'left'
+                  }}>
+                    <strong>Important:</strong> If the verification email does not arrive:
+                    <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                      <li>Check your <strong>Spam, Junk, or Promotions</strong> folder.</li>
+                      <li>Verify your Sender Email is configured correctly in the SendGrid Single Sender Verification console.</li>
+                    </ul>
+                  </div>
+                )}
+
+                {authMode === 'verify_signup_otp' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthOtpCode(actualOtpCode);
+                      alert(`[DEV MODE] Auto-filled OTP code: ${actualOtpCode}`);
+                    }}
+                    style={{
+                      marginTop: '8px', width: '100%', padding: '6px', fontSize: '0.7rem',
+                      background: 'rgba(25,23,21,0.04)', border: '1px dashed rgba(25,23,21,0.15)',
+                      borderRadius: '4px', cursor: 'pointer', fontWeight: 600
+                    }}
+                  >
+                    Auto-Fill OTP Code (Dev Mode Bypass)
+                  </button>
+                )}
               </div>
             )}
 
