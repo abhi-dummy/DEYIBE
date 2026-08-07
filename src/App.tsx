@@ -105,7 +105,7 @@ export default function App() {
   const activeTabRef = useRef(activeTab);
 
   // Shelf Section Sub-Tab
-  const [shelfSubTab, setShelfSubTab] = useState<'catalog' | 'inventory'>('catalog');
+  const [shelfSubTab, setShelfSubTab] = useState<'catalog' | 'inventory' | 'bought'>('catalog');
 
   // Synced States
   const [shelfItems, setShelfItems] = useState<ShelfItem[]>([]);
@@ -141,6 +141,16 @@ export default function App() {
   const syncChannelRef = useRef<any>(null);
   const activeRunRef = useRef<RunSession | null>(null);
   const currentUserProfileRef = useRef<Homemate | null>(null);
+  const tasksRef = useRef<Task[]>([]);
+  const shelfItemsRef = useRef<ShelfItem[]>([]);
+
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
+  useEffect(() => {
+    shelfItemsRef.current = shelfItems;
+  }, [shelfItems]);
 
   // Shopping Run Timer States
   const [runTimerDuration, setRunTimerDuration] = useState<number>(20 * 60);
@@ -163,6 +173,13 @@ export default function App() {
   const [showOCRModal, setShowOCRModal] = useState(false);
   const [showShelfDetailsModal, setShowShelfDetailsModal] = useState<ShelfItem | null>(null);
   const [showAddChoreModal, setShowAddChoreModal] = useState(false);
+  
+  // Custom Split Groups States
+  const [splitGroups, setSplitGroups] = useState<any[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [showAddGroupModal, setShowAddGroupModal] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupMembers, setNewGroupMembers] = useState<string[]>([]);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
   const [showWishlistDetailsModal, setShowWishlistDetailsModal] = useState<InventoryItem | null>(null);
@@ -368,6 +385,34 @@ export default function App() {
     };
   }, [showStillShoppingPrompt, promptTimeoutRemaining]);
 
+  // Shopping session auto-expiration ticker
+  useEffect(() => {
+    const handleTicker = async () => {
+      if (activeRun) {
+        const runIdParts = activeRun.id.split('_');
+        const ts = parseInt(runIdParts[1]);
+        if (!isNaN(ts)) {
+          const elapsedMs = Date.now() - ts;
+          if (elapsedMs >= 30 * 60 * 1000) {
+            console.log('Shopping session expired (30m elapsed). Auto-ending run.');
+            if (dbSynced) {
+              await supabase
+                .from('run_sessions')
+                .update({ status: 'completed' })
+                .eq('id', activeRun.id);
+            }
+            setActiveRun(null);
+            localStorage.removeItem('deyibe_run_notified_at');
+            setRunTimerActive(false);
+            alert("Your shopping run has expired and ended automatically.");
+          }
+        }
+      }
+    };
+    const tInterval = setInterval(handleTicker, 20000); // Check every 20 seconds
+    return () => clearInterval(tInterval);
+  }, [activeRun, dbSynced]);
+
   const handleStillShoppingResponse = (stillShopping: boolean) => {
     setShowStillShoppingPrompt(false);
     if (stillShopping) {
@@ -570,42 +615,81 @@ export default function App() {
     loadKompaData();
   }, [activeKompa]);
 
+  // Consolidated helper to clean up expired completed chores and stocked shelf items after 24 hours
+  const cleanupExpiredTasksAndStock = (loadedTasks: Task[], loadedShelf: ShelfItem[]) => {
+    const now = Date.now();
+
+    // 1. Chores cleanup
+    const expiredTaskIds: string[] = [];
+    loadedTasks.forEach(tk => {
+      if (tk.completed) {
+        let completedTime: number | null = null;
+        if (tk.completedAt) {
+          completedTime = new Date(tk.completedAt).getTime();
+        } else if (tk.id.startsWith('t_')) {
+          const ts = parseInt(tk.id.split('_')[1]);
+          if (!isNaN(ts)) completedTime = ts;
+        }
+        
+        // If we still can't find completedTime, default it to now so it starts the 24-hour countdown
+        if (!completedTime) {
+          completedTime = now;
+        }
+
+        if (now - completedTime >= 24 * 60 * 60 * 1000) {
+          expiredTaskIds.push(tk.id);
+        }
+      }
+    });
+
+    if (expiredTaskIds.length > 0) {
+      setTasks(prev => prev.filter(tk => !expiredTaskIds.includes(tk.id)));
+      safeDbWrite(() => supabase.from('tasks').delete().in('id', expiredTaskIds));
+    }
+
+    // 2. Stocked items cleanup
+    const expiredShelfIds: string[] = [];
+    loadedShelf.forEach(s => {
+      if (s.status === 'stocked' && s.restockedAt) {
+        const restockedTime = new Date(s.restockedAt).getTime();
+        if (now - restockedTime >= 24 * 60 * 60 * 1000) {
+          expiredShelfIds.push(s.id);
+        }
+      }
+    });
+
+    if (expiredShelfIds.length > 0) {
+      setShelfItems(prev => prev.filter(s => !expiredShelfIds.includes(s.id)));
+      safeDbWrite(() => supabase.from('shelf_items').delete().in('id', expiredShelfIds));
+    }
+  };
+
   // Load specific data for active Kompa
-  const loadKompaData = async () => {
+  const lastRestockedRef = useRef<number>(0);
+
+  const loadKompaData = async (skipShelf = false) => {
     if (!activeKompa) return;
     try {
       setDbLoading(true);
       
-      // Load shelf items
-      const { data: shelf } = await supabase.from('shelf_items').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
-      if (shelf) {
-        const loadedShelf: ShelfItem[] = shelf.map(s => ({
-          id: s.id,
-          name: s.name,
-          status: s.status,
-          priority: s.priority,
-          addedById: s.added_by || '1',
-          visibility: s.visibility || [],
-          timestamp: 'Synced',
-          restockedAt: s.restocked_at || undefined,
-          stockedBy: s.stocked_by || undefined
-        }));
-        setShelfItems(loadedShelf);
-
-        // Auto-delete expired stocked items (stocked more than 24 hours ago)
-        const expiredShelfIds: string[] = [];
-        const now = Date.now();
-        loadedShelf.forEach(s => {
-          if (s.status === 'stocked' && s.restockedAt) {
-            const restockedTime = new Date(s.restockedAt).getTime();
-            if (now - restockedTime >= 24 * 60 * 60 * 1000) {
-              expiredShelfIds.push(s.id);
-            }
-          }
-        });
-        if (expiredShelfIds.length > 0) {
-          setShelfItems(prev => prev.filter(s => !expiredShelfIds.includes(s.id)));
-          safeDbWrite(() => supabase.from('shelf_items').delete().in('id', expiredShelfIds));
+      // Load shelf items — skip if a restock happened within the last 6 seconds (race condition guard)
+      let loadedShelf: ShelfItem[] = [];
+      const timeSinceRestock = Date.now() - lastRestockedRef.current;
+      if (!skipShelf && timeSinceRestock > 6000) {
+        const { data: shelf } = await supabase.from('shelf_items').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
+        if (shelf) {
+          loadedShelf = shelf.map(s => ({
+            id: s.id,
+            name: s.name,
+            status: s.status,
+            priority: s.priority,
+            addedById: s.added_by || '1',
+            visibility: s.visibility || [],
+            timestamp: 'Synced',
+            restockedAt: s.restocked_at || undefined,
+            stockedBy: s.stocked_by || undefined
+          }));
+          setShelfItems(loadedShelf);
         }
       }
 
@@ -621,9 +705,10 @@ export default function App() {
       }
 
       // Load tasks/chores
+      let loadedTasks: Task[] = [];
       const { data: chores } = await supabase.from('tasks').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
       if (chores) {
-        const loadedTasks: Task[] = chores.map(t => ({
+        loadedTasks = chores.map(t => ({
           id: t.id,
           title: t.title,
           assignedTo: t.assigned_to || [],
@@ -634,23 +719,10 @@ export default function App() {
           completedAt: t.completed_at || undefined
         }));
         setTasks(loadedTasks);
-        
-        // Auto-delete expired completed chores (completed more than 24 hours ago)
-        const expiredIds: string[] = [];
-        const now = Date.now();
-        loadedTasks.forEach(tk => {
-          if (tk.completed && tk.completedAt) {
-            const completedTime = new Date(tk.completedAt).getTime();
-            if (now - completedTime >= 24 * 60 * 60 * 1000) {
-              expiredIds.push(tk.id);
-            }
-          }
-        });
-        if (expiredIds.length > 0) {
-          setTasks(prev => prev.filter(tk => !expiredIds.includes(tk.id)));
-          safeDbWrite(() => supabase.from('tasks').delete().in('id', expiredIds));
-        }
       }
+
+      // Run consolidated 24-hour cleanup
+      cleanupExpiredTasksAndStock(loadedTasks, loadedShelf);
 
       // Load expenses
       const { data: exp } = await supabase.from('expenses').select('*').eq('kompa_id', activeKompa.id).order('date', { ascending: false });
@@ -664,7 +736,8 @@ export default function App() {
           shares: e.shares,
           date: new Date(e.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
           visibility: [],
-          itemsJson: e.items_json || []
+          itemsJson: e.items_json || [],
+          groupId: e.group_id || undefined
         })));
       }
 
@@ -719,40 +792,60 @@ export default function App() {
       
       if (sessions && sessions.length > 0) {
         const currentSession = sessions[0];
-        const { data: requests } = await supabase
-          .from('run_requests')
-          .select('*')
-          .eq('run_id', currentSession.id);
         
-        setActiveRun({
-          id: currentSession.id,
-          shopperId: currentSession.shopper_id,
-          store: currentSession.store,
-          status: 'active',
-          requests: requests ? requests.map((r: any) => ({
-            id: r.id,
-            itemName: r.item_name,
-            requesterId: r.requester_id,
-            status: r.status,
-            price: Number(r.price) || undefined,
-            replacementName: r.replacement_name || undefined,
-            replacementPrice: Number(r.replacement_price) || undefined
-          })) : []
-        });
+        // Auto-end checks: check if the session is older than 30 minutes (1800000 ms)
+        const sessionCreatedTime = new Date(currentSession.created_at || currentSession.id.replace('run_', '')).getTime();
+        const ageInMs = Date.now() - sessionCreatedTime;
+        
+        if (ageInMs >= 30 * 60 * 1000) {
+          console.log(`Auto-expiring shopping run ${currentSession.id} (started ${Math.round(ageInMs / 60000)}m ago)`);
+          
+          if (dbSynced) {
+            await supabase
+              .from('run_sessions')
+              .update({ status: 'completed' })
+              .eq('id', currentSession.id);
+          }
+          setActiveRun(null);
+          localStorage.removeItem('deyibe_run_notified_at');
+          setRunTimerActive(false);
+          setRunTimerDuration(20 * 60);
+        } else {
+          const { data: requests } = await supabase
+            .from('run_requests')
+            .select('*')
+            .eq('run_id', currentSession.id);
+          
+          setActiveRun({
+            id: currentSession.id,
+            shopperId: currentSession.shopper_id,
+            store: currentSession.store,
+            status: 'active',
+            requests: requests ? requests.map((r: any) => ({
+              id: r.id,
+              itemName: r.item_name,
+              requesterId: r.requester_id,
+              status: r.status,
+              price: Number(r.price) || undefined,
+              replacementName: r.replacement_name || undefined,
+              replacementPrice: Number(r.replacement_price) || undefined
+            })) : []
+          });
 
-        // V8: Hydrate timer from localStorage if notified
-        const savedNotifiedAt = localStorage.getItem('deyibe_run_notified_at');
-        if (savedNotifiedAt) {
-          const elapsed = Math.floor((Date.now() - Number(savedNotifiedAt)) / 1000);
-          const remaining = (20 * 60) - elapsed;
-          if (remaining > 0) {
-            setRunTimerDuration(remaining);
-            setRunTimerActive(true);
-          } else {
-            setRunTimerDuration(0);
-            setRunTimerActive(false);
-            setShowStillShoppingPrompt(true);
-            setPromptTimeoutRemaining(60);
+          // V8: Hydrate timer from localStorage if notified
+          const savedNotifiedAt = localStorage.getItem('deyibe_run_notified_at');
+          if (savedNotifiedAt) {
+            const elapsed = Math.floor((Date.now() - Number(savedNotifiedAt)) / 1000);
+            const remaining = (20 * 60) - elapsed;
+            if (remaining > 0) {
+              setRunTimerDuration(remaining);
+              setRunTimerActive(true);
+            } else {
+              setRunTimerDuration(0);
+              setRunTimerActive(false);
+              setShowStillShoppingPrompt(true);
+              setPromptTimeoutRemaining(60);
+            }
           }
         }
       } else {
@@ -802,6 +895,28 @@ export default function App() {
         setRecentStores(rankedStores);
       }
 
+      // Load split groups safely (catch if table doesn't exist)
+      try {
+        const { data: grps, error: grpsErr } = await supabase
+          .from('split_groups')
+          .select('*')
+          .eq('kompa_id', activeKompa.id);
+        
+        if (!grpsErr && grps) {
+          setSplitGroups(grps.map(g => ({
+            id: g.id,
+            name: g.name,
+            memberIds: g.member_ids || []
+          })));
+        } else {
+          const cached = localStorage.getItem(`split_groups_${activeKompa.id}`);
+          if (cached) setSplitGroups(JSON.parse(cached));
+        }
+      } catch (e) {
+        const cached = localStorage.getItem(`split_groups_${activeKompa.id}`);
+        if (cached) setSplitGroups(JSON.parse(cached));
+      }
+
       setDbSynced(true);
     } catch (err) {
       console.warn('Failed loading Kompa data', err);
@@ -846,7 +961,7 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
         const { data } = await supabase.from('tasks').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
         if (data) {
-          setTasks(data.map(t => ({
+          const loadedTks: Task[] = data.map(t => ({
             id: t.id,
             title: t.title,
             assignedTo: t.assigned_to || [],
@@ -855,13 +970,15 @@ export default function App() {
             frequency: t.frequency,
             choreType: t.chore_type,
             completedAt: t.completed_at || undefined
-          })));
+          }));
+          setTasks(loadedTks);
+          cleanupExpiredTasksAndStock(loadedTks, shelfItemsRef.current);
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shelf_items', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
         const { data } = await supabase.from('shelf_items').select('*').eq('kompa_id', activeKompa.id).order('created_at', { ascending: false });
         if (data) {
-          setShelfItems(data.map(s => ({
+          const loadedSh: ShelfItem[] = data.map(s => ({
             id: s.id,
             name: s.name,
             status: s.status,
@@ -871,7 +988,9 @@ export default function App() {
             timestamp: 'Synced',
             restockedAt: s.restocked_at || undefined,
             stockedBy: s.stocked_by || undefined
-          })));
+          }));
+          setShelfItems(loadedSh);
+          cleanupExpiredTasksAndStock(tasksRef.current, loadedSh);
         }
       })
       .on('broadcast', { event: 'typing' }, (payload: any) => {
@@ -982,12 +1101,14 @@ export default function App() {
             shares: e.shares,
             date: new Date(e.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
             visibility: [],
-            itemsJson: e.items_json || []
+            itemsJson: e.items_json || [],
+            groupId: e.group_id || undefined
           })));
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'run_sessions', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
-        loadKompaData();
+        // Skip shelf reload when a run session changes — avoids shelf race condition
+        loadKompaData(true);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'run_requests' }, async (payload: any) => {
         if (payload.eventType === 'INSERT') {
@@ -1001,17 +1122,19 @@ export default function App() {
             }
           }
         }
-        loadKompaData();
+        // Skip shelf reload for run_requests changes — avoids shelf race condition
+        loadKompaData(true);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pulse_alerts', filter: `kompa_id=eq.${activeKompa.id}` }, (payload: any) => {
         const alert = payload.new;
         if (alert) {
           triggerPushNotification(alert.title, alert.message);
         }
-        loadKompaData();
+        // Skip shelf reload for pulse_alerts — avoids shelf race condition
+        loadKompaData(true);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kompa_members', filter: `kompa_id=eq.${activeKompa.id}` }, async () => {
-        loadKompaData();
+        loadKompaData(true);
       })
       .subscribe((status) => {
         console.log(`Realtime consolidated channel status for kompa_sync_${activeKompa.id}:`, status);
@@ -1568,7 +1691,8 @@ export default function App() {
       splitMethod: 'custom',
       shares: { [creditorId]: amount },
       date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
-      visibility: []
+      visibility: [],
+      groupId: selectedGroupId || undefined
     };
 
     setExpenses(prev => [settleExpense, ...prev]);
@@ -1581,7 +1705,8 @@ export default function App() {
         amount: amount,
         payer_id: debtorId,
         split_method: 'custom',
-        shares: { [creditorId]: amount }
+        shares: { [creditorId]: amount },
+        group_id: selectedGroupId || null
       }));
     }
 
@@ -1593,6 +1718,53 @@ export default function App() {
 
     logFlow(`${debtor} settled $${amount.toFixed(2)} balance with ${creditor}`, 'split');
     addPulse('Account Settled', `${debtor} paid ${creditor} $${amount.toFixed(2)}.`, 'success');
+  };
+
+  // Custom Split Groups handlers
+  const handleCreateSplitGroup = async () => {
+    if (!newGroupName.trim() || newGroupMembers.length < 2 || !activeKompa) {
+      alert("Please enter a group name and select at least 2 members.");
+      return;
+    }
+    const newGroup = {
+      id: `g_${Date.now()}`,
+      name: newGroupName.trim(),
+      memberIds: newGroupMembers
+    };
+
+    setSplitGroups(prev => [...prev, newGroup]);
+    localStorage.setItem(`split_groups_${activeKompa.id}`, JSON.stringify([...splitGroups, newGroup]));
+
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('split_groups').insert({
+        id: newGroup.id,
+        kompa_id: activeKompa.id,
+        name: newGroup.name,
+        member_ids: newGroup.memberIds
+      }));
+    }
+
+    setNewGroupName('');
+    setNewGroupMembers([]);
+    setShowAddGroupModal(false);
+    setSelectedGroupId(newGroup.id);
+  };
+
+  const handleDeleteSplitGroup = async (groupId: string) => {
+    const confirmDel = window.confirm("Delete this Split Group? Expenses linked to this group will no longer be visible inside it.");
+    if (!confirmDel) return;
+
+    setSplitGroups(prev => prev.filter(g => g.id !== groupId));
+    const nextGrps = splitGroups.filter(g => g.id !== groupId);
+    if (activeKompa) {
+      localStorage.setItem(`split_groups_${activeKompa.id}`, JSON.stringify(nextGrps));
+    }
+    if (dbSynced) {
+      safeDbWrite(() => supabase.from('split_groups').delete().eq('id', groupId));
+    }
+    if (selectedGroupId === groupId) {
+      setSelectedGroupId(null);
+    }
   };
 
   // Buzz Roommate
@@ -1659,6 +1831,10 @@ export default function App() {
     const stockedByVal = newStatus === 'stocked' ? currentUserProfile.name : undefined;
     const restockedAtVal = newStatus === 'stocked' ? new Date().toISOString() : undefined;
     
+    // Mark restock time to guard against race condition with loadKompaData
+    lastRestockedRef.current = Date.now();
+
+    // Optimistic local update
     setShelfItems(prev => prev.map(i => {
       if (i.id === item.id) {
         return { 
@@ -1672,20 +1848,15 @@ export default function App() {
     }));
 
     if (dbSynced) {
-      try {
-        const { error } = await supabase.from('shelf_items').update({
-          status: newStatus,
-          restocked_at: restockedAtVal,
-          stocked_by: stockedByVal
-        }).eq('id', item.id);
+      // Try with stocked_by column first, fall back to basic fields if column missing
+      const { error } = await supabase.from('shelf_items').update({
+        status: newStatus,
+        restocked_at: restockedAtVal,
+        stocked_by: stockedByVal
+      }).eq('id', item.id);
 
-        if (error && error.message.includes('stocked_by')) {
-          await supabase.from('shelf_items').update({
-            status: newStatus,
-            restocked_at: restockedAtVal
-          }).eq('id', item.id);
-        }
-      } catch (err) {
+      if (error) {
+        console.warn('Failed to update shelf item with stocked_by, falling back to basic fields:', error.message);
         await supabase.from('shelf_items').update({
           status: newStatus,
           restocked_at: restockedAtVal
@@ -2507,15 +2678,35 @@ export default function App() {
       const match = itemNamesLower.some((name: string) => name.includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(name));
       if (match) {
         if (dbSynced) {
-          safeDbWrite(() => supabase.from('shelf_items').update({ status: 'stocked' }).eq('id', s.id));
+          safeDbWrite(async () => {
+            const { error } = await supabase.from('shelf_items').update({
+              status: 'stocked',
+              restocked_at: new Date().toISOString(),
+              stocked_by: currentUserProfile.name
+            }).eq('id', s.id);
+            if (error) {
+              await supabase.from('shelf_items').update({
+                status: 'stocked',
+                restocked_at: new Date().toISOString()
+              }).eq('id', s.id);
+            }
+          });
         }
-        return { ...s, status: 'stocked', restockedAt: new Date().toISOString() };
+        return { ...s, status: 'stocked', restockedAt: new Date().toISOString(), stockedBy: currentUserProfile.name };
       }
       return s;
     }));
 
     logFlow(`Logged receipt split for ${ocrResult.merchant}`, 'split');
     addPulse('Receipt Processed', `Receipt cost of $${ocrResult.total.toFixed(2)} logged.`, 'success');
+  };
+
+  const handleOpenAddExpense = () => {
+    const defaultMembers = selectedGroupId
+      ? (splitGroups.find(g => g.id === selectedGroupId)?.memberIds || [])
+      : kompaMembers.map(m => m.id);
+    setNewExpVisibility(defaultMembers);
+    setShowAddExpenseModal(true);
   };
 
   // Add Manual Expense (with itemized support)
@@ -2526,12 +2717,16 @@ export default function App() {
     const finalShares: Record<string, number> = {};
     let finalItemsList: Array<{ name: string; cost: number; splitWith: string[] }> = [];
 
+    const defaultMembers = selectedGroupId
+      ? (splitGroups.find(g => g.id === selectedGroupId)?.memberIds || [])
+      : kompaMembers.map(m => m.id);
+
     if (isItemized) {
       // Multi item itemized split calculation
       finalItemsList = itemizedList.map(item => ({
         name: item.name.trim() || 'Item',
         cost: parseFloat(item.cost) || 0,
-        splitWith: item.splitWith.length > 0 ? item.splitWith : kompaMembers.map(m => m.id)
+        splitWith: item.splitWith.length > 0 ? item.splitWith : defaultMembers
       }));
 
       finalAmount = finalItemsList.reduce((sum, item) => sum + item.cost, 0);
@@ -2555,15 +2750,15 @@ export default function App() {
       if (!newExpTitle.trim() || isNaN(amt) || amt <= 0) return;
       finalAmount = amt;
 
-      const activeMembers = newExpVisibility.length > 0 ? newExpVisibility : kompaMembers.map(m => m.id);
+      const activeMembers = newExpVisibility.length > 0 ? newExpVisibility : defaultMembers;
       
       if (newExpSplit === 'percentage') {
         let totalPct = 0;
-        activeMembers.forEach(id => {
+        activeMembers.forEach((id: string) => {
           totalPct += splitWeights[id] || 0;
         });
         
-        activeMembers.forEach(id => {
+        activeMembers.forEach((id: string) => {
           const pct = splitWeights[id] || 0;
           const pctRatio = totalPct > 0 ? (pct / totalPct) : (1 / activeMembers.length);
           finalShares[id] = Number((finalAmount * pctRatio).toFixed(2));
@@ -2571,7 +2766,7 @@ export default function App() {
       } else {
         // Equal split calculation
         const share = finalAmount / activeMembers.length;
-        activeMembers.forEach(id => {
+        activeMembers.forEach((id: string) => {
           finalShares[id] = Number(share.toFixed(2));
         });
       }
@@ -2586,7 +2781,8 @@ export default function App() {
       shares: finalShares,
       date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
       visibility: newExpVisibility,
-      itemsJson: finalItemsList
+      itemsJson: finalItemsList,
+      groupId: selectedGroupId || undefined
     };
 
     setExpenses(prev => [newExpense, ...prev]);
@@ -2606,7 +2802,8 @@ export default function App() {
         payer_id: newExpPayer,
         split_method: newExpense.splitMethod,
         shares: finalShares,
-        items_json: finalItemsList
+        items_json: finalItemsList,
+        group_id: selectedGroupId || null
       }));
     }
 
@@ -2671,26 +2868,45 @@ export default function App() {
     setNewInvStatus('want');
   };
 
-  const optimizedDebts = getOptimizedDebts(expenses, kompaMembers);
-  const netBalances = calculateBalances(expenses, kompaMembers);
+  const activeExpensesForCalculations = selectedGroupId
+    ? expenses.filter(e => e.groupId === selectedGroupId)
+    : expenses;
+
+  const activeMembersForCalculations = selectedGroupId
+    ? kompaMembers.filter(m => (splitGroups.find(g => g.id === selectedGroupId)?.memberIds || []).includes(m.id))
+    : kompaMembers;
+
+  const optimizedDebts = getOptimizedDebts(activeExpensesForCalculations, activeMembersForCalculations);
+  const netBalances = calculateBalances(activeExpensesForCalculations, activeMembersForCalculations);
 
   // V8: Roommate Analytics Spending Dashboards Calculations
   const getRoommateInsights = (memberId: string) => {
-    // 1. Core aggregates
-    const participantExpenses = expenses.filter(e => e.shares && e.shares[memberId] !== undefined);
-    
+    // 1. Overall personal spend calculation as requested by user
+    const myPaidExpenses = activeExpensesForCalculations.filter(e => e.payerId === memberId);
+    const totalPaidByMe = myPaidExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+    const othersPaidExpenses = activeExpensesForCalculations.filter(e => e.payerId !== memberId && e.shares && e.shares[memberId] !== undefined);
+    const totalChargedByOthers = othersPaidExpenses.reduce((sum, e) => sum + (e.shares[memberId] || 0), 0);
+
+    const overallPersonalSpend = totalPaidByMe + totalChargedByOthers;
+
+    // Lent/Borrowed aggregates
+    const totalOwedToMe = myPaidExpenses.reduce((sum, e) => sum + (e.amount - (e.shares[memberId] || 0)), 0);
+    const totalIOwe = othersPaidExpenses.reduce((sum, e) => sum + (e.shares[memberId] || 0), 0);
+    const netBalance = totalOwedToMe - totalIOwe;
+
+    // 2. Average share spent
+    const participantExpenses = activeExpensesForCalculations.filter(e => e.shares && e.shares[memberId] !== undefined);
     const totalSpent = participantExpenses.reduce((sum, e) => sum + (e.shares[memberId] || 0), 0);
     const avgSpend = participantExpenses.length > 0 ? totalSpent / participantExpenses.length : 0;
     
     const individualCosts = participantExpenses.map(e => e.shares[memberId] || 0);
     const highestSpend = individualCosts.length > 0 ? Math.max(...individualCosts) : 0;
-    const lowestSpend = individualCosts.length > 0 ? Math.min(...individualCosts) : 0;
 
-    // 2. Favorite stores mapping
+    // 3. Favorite stores mapping
     const storeFrequencies: Record<string, number> = {};
-    expenses.forEach(e => {
+    activeExpensesForCalculations.forEach(e => {
       if (e.shares && e.shares[memberId] !== undefined) {
-        // Extract store name from title e.g. "Shopping Run: Costco" -> "Costco"
         const cleanStore = e.title.includes('Costco') ? 'Costco' : e.title.includes('Walmart') ? 'Walmart' : e.title.includes('Patel') ? 'Patel Brothers' : 'Other';
         storeFrequencies[cleanStore] = (storeFrequencies[cleanStore] || 0) + 1;
       }
@@ -2700,9 +2916,9 @@ export default function App() {
       .sort((a, b) => b[1] - a[1])
       .map(entry => entry[0])[0] || 'Costco';
 
-    // 3. House comparisons
+    // 4. House comparisons
     const groupTotals = kompaMembers.map(m => {
-      return expenses
+      return activeExpensesForCalculations
         .filter(e => e.shares && e.shares[m.id] !== undefined)
         .reduce((sum, e) => sum + (e.shares[m.id] || 0), 0);
     });
@@ -2714,10 +2930,13 @@ export default function App() {
       totalSpent,
       avgSpend,
       highestSpend,
-      lowestSpend,
       favStore,
       houseAvg,
-      rank
+      rank,
+      overallPersonalSpend,
+      totalOwedToMe,
+      totalIOwe,
+      netBalance
     };
   };
 
@@ -4584,6 +4803,13 @@ export default function App() {
                   >
                     Wishlist & Assets
                   </button>
+                  <button 
+                    className={`persona-btn ${shelfSubTab === 'bought' ? 'active' : ''}`}
+                    onClick={() => setShelfSubTab('bought')}
+                    style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                  >
+                    Recently Bought
+                  </button>
                 </div>
               </div>
 
@@ -4593,13 +4819,13 @@ export default function App() {
                   <Plus size={14} />
                   Add Stock
                 </button>
-              ) : (
+              ) : shelfSubTab === 'inventory' ? (
                 <button className="btn-primary" style={{ padding: '7px 12px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
                   onClick={() => setShowAddInventoryModal(true)}>
                   <Plus size={14} />
-                  Add Asset
+                  Add Wishlist
                 </button>
-              )}
+              ) : null}
             </div>
 
             {/* Sub tab 1: Standard Stock Catalog */}
@@ -4671,76 +4897,161 @@ export default function App() {
           )}
 
             {/* Sub tab 2: Shared Wishlist assets */}
-            {shelfSubTab === 'inventory' && (
-              <div>
-                {inventoryItems.length === 0 ? (
-                  <div className="glass-card" style={{ padding: '30px 16px', textAlign: 'center' }}>
-                    <ImageIcon size={30} style={{ color: '#191715', margin: '0 auto 10px' }} />
-                    <h4 style={{ fontWeight: 800 }}>No Wishlist Assets</h4>
-                    <p style={{ fontSize: '0.78rem', color: '#8c857e', marginTop: '4px' }}>
-                      Add appliances, household items, or wishlist entries you want to share with roommates.
-                    </p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {inventoryItems.map(item => (
-                      <div 
-                        key={item.id} 
-                        className="glass-card" 
-                        style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '12px', margin: 0, cursor: 'pointer' }}
-                        onClick={() => setShowWishlistDetailsModal(item)}
-                      >
-                        {renderWishlistClipart(item.imageUrl || '')}
-                        
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#191715' }}>{item.name}</div>
-                          
-                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                            <span className={`wishlist-status-pill ${item.status || 'want'}`}>
-                              {item.status === 'bought' ? 'Bought!' : item.status === 'waiting' ? 'Waiting for offer' : 'Wanting to Buy'}
-                            </span>
-                          </div>
+            {shelfSubTab === 'inventory' && (() => {
+              const activeWishlistItems = inventoryItems
+                .filter(item => item.status !== 'bought')
+                .sort((a, b) => {
+                  const statusOrder = { 'want': 1, 'waiting': 2, 'bought': 3 };
+                  return (statusOrder[a.status || 'want'] || 1) - (statusOrder[b.status || 'want'] || 1);
+                });
 
-                          <div style={{ fontSize: '0.75rem', color: '#8c857e', marginTop: '4px', display: 'flex', gap: '8px' }}>
-                            <span>Price: ${item.price?.toFixed(2)}</span>
-                            <span>•</span>
-                            <span>Added by: {item.addedBy}</span>
-                          </div>
-                        </div>
-
-                        {item.itemUrl && (
-                          <a 
-                            href={item.itemUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            onClick={e => e.stopPropagation()}
-                            style={{ padding: '8px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.04)', color: '#191715', display: 'flex' }}
-                          >
-                            <ExternalLink size={14} />
-                          </a>
-                        )}
-                        
-                        <button 
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            const confirmDel = window.confirm('Remove this asset from wishlist?');
-                            if (confirmDel) {
-                              setInventoryItems(prev => prev.filter(i => i.id !== item.id));
-                              if (dbSynced) {
-                                await supabase.from('inventory_items').delete().eq('id', item.id);
-                              }
-                            }
-                          }}
-                          style={{ background: 'none', border: 'none', padding: '8px', color: 'var(--accent-rose)', cursor: 'pointer' }}
+              return (
+                <div>
+                  {activeWishlistItems.length === 0 ? (
+                    <div className="glass-card" style={{ padding: '30px 16px', textAlign: 'center' }}>
+                      <ImageIcon size={30} style={{ color: '#191715', margin: '0 auto 10px' }} />
+                      <h4 style={{ fontWeight: 800 }}>No Wishlist Assets</h4>
+                      <p style={{ fontSize: '0.78rem', color: '#8c857e', marginTop: '4px' }}>
+                        Add appliances, household items, or wishlist entries you want to share with roommates.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {activeWishlistItems.map(item => (
+                        <div 
+                          key={item.id} 
+                          className="glass-card" 
+                          style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '12px', margin: 0, cursor: 'pointer' }}
+                          onClick={() => setShowWishlistDetailsModal(item)}
                         >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                          {renderWishlistClipart(item.imageUrl || '')}
+                          
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#191715', textAlign: 'left' }}>{item.name}</div>
+                            
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <span className={`wishlist-status-pill ${item.status || 'want'}`}>
+                                {item.status === 'bought' ? 'Bought!' : item.status === 'waiting' ? 'Waiting for offer' : 'Wanting to Buy'}
+                              </span>
+                            </div>
+
+                            <div style={{ fontSize: '0.75rem', color: '#8c857e', marginTop: '4px', display: 'flex', gap: '8px' }}>
+                              <span>Price: ${item.price?.toFixed(2)}</span>
+                              <span>•</span>
+                              <span>Added by: {item.addedBy}</span>
+                            </div>
+                          </div>
+
+                          {item.itemUrl && (
+                            <a 
+                              href={item.itemUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              onClick={e => e.stopPropagation()}
+                              style={{ padding: '8px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.04)', color: '#191715', display: 'flex' }}
+                            >
+                              <ExternalLink size={14} />
+                            </a>
+                          )}
+                          
+                          <button 
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const confirmDel = window.confirm('Remove this asset from wishlist?');
+                              if (confirmDel) {
+                                setInventoryItems(prev => prev.filter(i => i.id !== item.id));
+                                if (dbSynced) {
+                                  await supabase.from('inventory_items').delete().eq('id', item.id);
+                                }
+                              }
+                            }}
+                            style={{ background: 'none', border: 'none', padding: '8px', color: 'var(--accent-rose)', cursor: 'pointer' }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Sub tab 3: Recently Bought Wishlist Assets */}
+            {shelfSubTab === 'bought' && (() => {
+              const boughtWishlistItems = inventoryItems.filter(item => item.status === 'bought');
+
+              return (
+                <div>
+                  {boughtWishlistItems.length === 0 ? (
+                    <div className="glass-card" style={{ padding: '30px 16px', textAlign: 'center' }}>
+                      <ImageIcon size={30} style={{ color: '#8c857e', margin: '0 auto 10px' }} />
+                      <h4 style={{ fontWeight: 800, color: '#8c857e' }}>No Purchased Items</h4>
+                      <p style={{ fontSize: '0.78rem', color: '#8c857e', marginTop: '4px' }}>
+                        Wishlist items marked as "Bought!" will automatically show up here.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {boughtWishlistItems.map(item => (
+                        <div 
+                          key={item.id} 
+                          className="glass-card" 
+                          style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '12px', margin: 0, cursor: 'pointer' }}
+                          onClick={() => setShowWishlistDetailsModal(item)}
+                        >
+                          {renderWishlistClipart(item.imageUrl || '')}
+                          
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#191715', textAlign: 'left' }}>{item.name}</div>
+                            
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <span className="wishlist-status-pill bought">
+                                Bought!
+                              </span>
+                            </div>
+
+                            <div style={{ fontSize: '0.75rem', color: '#8c857e', marginTop: '4px', display: 'flex', gap: '8px' }}>
+                              <span>Price: ${item.price?.toFixed(2)}</span>
+                              <span>•</span>
+                              <span>Added by: {item.addedBy}</span>
+                            </div>
+                          </div>
+
+                          {item.itemUrl && (
+                            <a 
+                              href={item.itemUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              onClick={e => e.stopPropagation()}
+                              style={{ padding: '8px', borderRadius: '50%', background: 'rgba(25, 23, 21, 0.04)', color: '#191715', display: 'flex' }}
+                            >
+                              <ExternalLink size={14} />
+                            </a>
+                          )}
+                          
+                          <button 
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const confirmDel = window.confirm('Remove this asset from wishlist?');
+                              if (confirmDel) {
+                                setInventoryItems(prev => prev.filter(i => i.id !== item.id));
+                                if (dbSynced) {
+                                  await supabase.from('inventory_items').delete().eq('id', item.id);
+                                }
+                              }
+                            }}
+                            style={{ background: 'none', border: 'none', padding: '8px', color: 'var(--accent-rose)', cursor: 'pointer' }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Add stock modal */}
             {showAddShelfModal && (
@@ -4866,6 +5177,13 @@ export default function App() {
                           setShowWishlistDetailsModal({ ...showWishlistDetailsModal, status: nextStatus });
                           if (dbSynced) {
                             await supabase.from('inventory_items').update({ status: nextStatus }).eq('id', showWishlistDetailsModal.id);
+                          }
+                          // Auto-close modal and switch to Recently Bought tab when marked as bought
+                          if (nextStatus === 'bought') {
+                            setTimeout(() => {
+                              setShowWishlistDetailsModal(null);
+                              setShelfSubTab('bought');
+                            }, 600);
                           }
                         }}
                         style={{ marginTop: '4px' }}
@@ -5126,35 +5444,39 @@ export default function App() {
                     )}
                   </div>
                   
-                  {/* V8: Notify button with green Notified state machine */}
-                  {notifyState === 'success' && (
-                    <div className="notified-badge" style={{ flexShrink: 0 }}>
-                      <Check size={14} />
-                      Notified
-                    </div>
-                  )}
-                  {notifyState === 'sending' && (
-                    <button className="btn-primary" style={{ padding: '6px 10px', fontSize: '0.72rem', borderRadius: '4px', flexShrink: 0, opacity: 0.7 }} disabled>
-                      Notifying...
-                    </button>
-                  )}
-                  {notifyState === 'idle' && (
-                    <button 
-                      className="btn-primary" 
-                      style={{ padding: '6px 10px', fontSize: '0.72rem', borderRadius: '4px', flexShrink: 0 }}
-                      onClick={handleNotifyKompa}
-                    >
-                      Notify {activeKompa?.name || 'Group'} Kompa
-                    </button>
-                  )}
-                  {notifyState === 'failed' && (
-                    <button 
-                      className="btn-primary" 
-                      style={{ padding: '6px 10px', fontSize: '0.72rem', borderRadius: '4px', flexShrink: 0, background: 'var(--accent-rose)', borderColor: 'var(--accent-rose)' }}
-                      onClick={handleNotifyKompa}
-                    >
-                      Retry Notify
-                    </button>
+                  {/* V8: Notify button with green Notified state machine - Only shown to the Runner */}
+                  {activeRun.shopperId?.toString() === currentUserProfile?.id?.toString() && (
+                    <>
+                      {notifyState === 'success' && (
+                        <div className="notified-badge" style={{ flexShrink: 0 }}>
+                          <Check size={14} />
+                          Notified
+                        </div>
+                      )}
+                      {notifyState === 'sending' && (
+                        <button className="btn-primary" style={{ padding: '6px 10px', fontSize: '0.72rem', borderRadius: '4px', flexShrink: 0, opacity: 0.7 }} disabled>
+                          Notifying...
+                        </button>
+                      )}
+                      {notifyState === 'idle' && (
+                        <button 
+                          className="btn-primary" 
+                          style={{ padding: '6px 10px', fontSize: '0.72rem', borderRadius: '4px', flexShrink: 0 }}
+                          onClick={handleNotifyKompa}
+                        >
+                          Notify {activeKompa?.name || 'Group'} Kompa
+                        </button>
+                      )}
+                      {notifyState === 'failed' && (
+                        <button 
+                          className="btn-primary" 
+                          style={{ padding: '6px 10px', fontSize: '0.72rem', borderRadius: '4px', flexShrink: 0, background: 'var(--accent-rose)', borderColor: 'var(--accent-rose)' }}
+                          onClick={handleNotifyKompa}
+                        >
+                          Retry Notify
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -5429,17 +5751,68 @@ export default function App() {
                   Scan
                 </button>
                 <button className="btn-primary" style={{ padding: '7px 10px', borderRadius: '4px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  onClick={() => setShowAddExpenseModal(true)}>
+                  onClick={handleOpenAddExpense}>
                   <Plus size={14} />
                   Log
                 </button>
               </div>
             </div>
 
+            {/* Split Groups Picker */}
+            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '12px', borderBottom: '1px solid rgba(25,23,21,0.06)' }}>
+              <button
+                className={`persona-btn ${selectedGroupId === null ? 'active' : ''}`}
+                onClick={() => setSelectedGroupId(null)}
+                style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', borderRadius: '20px' }}
+              >
+                All Kompa
+              </button>
+              
+              {splitGroups.map(grp => (
+                <div key={grp.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: selectedGroupId === grp.id ? 'var(--button-bg-hover)' : 'rgba(25,23,21,0.03)', padding: '2px 8px', borderRadius: '20px' }}>
+                  <button
+                    className={`persona-btn ${selectedGroupId === grp.id ? 'active' : ''}`}
+                    onClick={() => setSelectedGroupId(grp.id)}
+                    style={{ padding: '4px 6px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: 'transparent', border: 'none', color: selectedGroupId === grp.id ? '#ffffff' : '#191715' }}
+                  >
+                    {grp.name} ({grp.memberIds.length})
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteSplitGroup(grp.id); }}
+                    style={{ background: 'none', border: 'none', padding: '2px', cursor: 'pointer', color: selectedGroupId === grp.id ? '#ffffff' : 'var(--accent-rose)', display: 'flex', alignItems: 'center' }}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setNewGroupMembers(kompaMembers.map(m => m.id)); // default all checked
+                  setShowAddGroupModal(true);
+                }}
+                style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Plus size={12} /> Add Group
+              </button>
+            </div>
+
             {/* Debt suggestions widget */}
             <div className="glass-card" style={{ borderLeft: '3px solid #191715', background: 'rgba(25, 23, 21, 0.02)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <h3 style={{ fontSize: '0.72rem', fontWeight: 800, color: '#8c857e', textTransform: 'uppercase', letterSpacing: '1px' }}>Optimization suggests</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <h3 style={{ fontSize: '0.72rem', fontWeight: 800, color: '#8c857e', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Optimization suggests</h3>
+                  <button 
+                    onClick={() => alert("What is Optimization Suggests?\n\nThis algorithm minimizes the total number of transactions needed to settle all debts in the group. Instead of everyone paying each other back individually, the system automatically aggregates everyone's split shares and calculates the absolute minimum path of direct peer-to-peer transfers to clear all balances.")}
+                    style={{
+                      background: 'none', border: 'none', padding: 0, color: '#8c857e', cursor: 'pointer', display: 'flex', alignItems: 'center'
+                    }}
+                    title="What is Optimization?"
+                  >
+                    <Info size={14} />
+                  </button>
+                </div>
                 <button className="btn-primary" style={{ padding: '4px 8px', fontSize: '0.72rem', borderRadius: '4px' }}
                   onClick={() => setShowSettleModal(true)}>
                   Settle Up
@@ -5472,38 +5845,54 @@ export default function App() {
                     <BarChart2 size={16} />
                     Personal Spending Dashboard
                   </h3>
-                  <select 
-                    value={selectedInsightUser || ''} 
-                    onChange={e => setSelectedInsightUser(e.target.value)}
-                    style={{ border: '1px solid rgba(25,23,21,0.1)', background: 'transparent', padding: '4px', fontSize: '0.75rem', fontWeight: 700, borderRadius: '4px', outline: 'none' }}
-                  >
-                    {kompaMembers.map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
                 </div>
 
-                {selectedInsightUser && (() => {
-                  const data = getRoommateInsights(selectedInsightUser);
+                {(() => {
+                  const insightUserId = currentUserProfile?.id;
+                  if (!insightUserId) return null;
+                  const data = getRoommateInsights(insightUserId);
 
                   return (
                     <div>
                       {/* Numeric aggregate parameters */}
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
                         <div style={{ background: 'rgba(25,23,21,0.01)', border: '1px solid rgba(25,23,21,0.03)', padding: '10px', borderRadius: '6px' }}>
-                          <span style={{ fontSize: '0.62rem', color: '#8c857e', textTransform: 'uppercase', fontWeight: 700 }}>Total Share Spent</span>
-                          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#191715', marginTop: '2px' }}>${data.totalSpent.toFixed(2)}</div>
+                          <span style={{ fontSize: '0.62rem', color: '#8c857e', textTransform: 'uppercase', fontWeight: 700 }}>Overall Personal Spend</span>
+                          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#191715', marginTop: '2px', textAlign: 'left' }}>${data.overallPersonalSpend.toFixed(2)}</div>
                         </div>
                         <div style={{ background: 'rgba(25,23,21,0.01)', border: '1px solid rgba(25,23,21,0.03)', padding: '10px', borderRadius: '6px' }}>
-                          <span style={{ fontSize: '0.62rem', color: '#8c857e', textTransform: 'uppercase', fontWeight: 700 }}>Average Item Cost</span>
-                          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#191715', marginTop: '2px' }}>${data.avgSpend.toFixed(2)}</div>
+                          <span style={{ fontSize: '0.62rem', color: '#8c857e', textTransform: 'uppercase', fontWeight: 700 }}>Total Share Spent</span>
+                          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#191715', marginTop: '2px', textAlign: 'left' }}>${data.totalSpent.toFixed(2)}</div>
+                        </div>
+                      </div>
+
+                      {/* Net Balance Status bar */}
+                      <div style={{
+                        padding: '10px 12px', borderRadius: '6px', marginBottom: '14px', textAlign: 'left',
+                        background: data.netBalance >= 0 ? 'rgba(16, 185, 129, 0.06)' : 'rgba(220, 38, 38, 0.06)',
+                        border: `1px solid ${data.netBalance >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(220, 38, 38, 0.15)'}`,
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                      }}>
+                        <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#191715' }}>
+                          Net Split Balance:
+                        </div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: data.netBalance >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)' }}>
+                          {data.netBalance >= 0 ? `You are owed $${data.netBalance.toFixed(2)}` : `You owe $${Math.abs(data.netBalance).toFixed(2)}`}
                         </div>
                       </div>
 
                       {/* Mini comparisons stats list */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.76rem', color: '#5e5954', borderBottom: '1px solid rgba(25,23,21,0.05)', paddingBottom: '12px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>Highest Split Item cost:</span>
+                          <span>Amount you paid/lent:</span>
+                          <strong style={{ color: '#191715' }}>${data.totalOwedToMe.toFixed(2)}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Amount others paid for you:</span>
+                          <strong style={{ color: '#191715' }}>${data.totalIOwe.toFixed(2)}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Highest Item share:</span>
                           <strong style={{ color: '#191715' }}>${data.highestSpend.toFixed(2)}</strong>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -5511,7 +5900,7 @@ export default function App() {
                           <strong style={{ color: '#191715' }}>{data.favStore}</strong>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>House Average:</span>
+                          <span>House Average Share:</span>
                           <strong style={{ color: '#191715' }}>${data.houseAvg.toFixed(2)}</strong>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -5842,7 +6231,7 @@ export default function App() {
             <div className="glass-card">
               <h3 style={{ fontSize: '0.9rem', fontWeight: 800, marginBottom: '10px', color: '#8c857e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Transaction History</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {expenses.map(exp => (
+                {activeExpensesForCalculations.map(exp => (
                   <div 
                     key={exp.id} 
                     onClick={() => setShowExpenseDetailsModal(exp)}
@@ -6364,6 +6753,66 @@ export default function App() {
                     <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                       <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setShowAddExpenseModal(false)}>Cancel</button>
                       <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleAddManualExpense}>Add Bill</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Create Custom Split Group Modal */}
+            {showAddGroupModal && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+                display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 110
+              }}>
+                <div className="glass-card" style={{ width: '90%', maxWidth: '380px', border: '1px solid rgba(25, 23, 21, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', alignItems: 'center' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>Create Split Group</h3>
+                    <X size={18} className="cursor-pointer" onClick={() => setShowAddGroupModal(false)} />
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Group Name</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Rent Split, Dinner, Trip" 
+                        value={newGroupName} 
+                        onChange={e => setNewGroupName(e.target.value)} 
+                        style={{ marginTop: '4px' }} 
+                      />
+                    </div>
+                    
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: '#8c857e', fontWeight: 600 }}>Included Roommates</label>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                        {kompaMembers.map(m => {
+                          const checked = newGroupMembers.includes(m.id);
+                          return (
+                            <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#191715', cursor: 'pointer', userSelect: 'none' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={checked} 
+                                onChange={() => {
+                                  if (checked) {
+                                    setNewGroupMembers(newGroupMembers.filter(id => id !== m.id));
+                                  } else {
+                                    setNewGroupMembers([...newGroupMembers, m.id]);
+                                  }
+                                }} 
+                                style={{ width: '16px', height: '16px' }}
+                              />
+                              {m.name}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={() => setShowAddGroupModal(false)}>Cancel</button>
+                      <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleCreateSplitGroup}>Create Group</button>
                     </div>
                   </div>
                 </div>

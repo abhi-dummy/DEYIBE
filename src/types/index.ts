@@ -22,6 +22,7 @@ export interface Expense {
   date: string;
   visibility: string[]; // user ids who can see this
   itemsJson?: Array<{ name: string; cost: number; splitWith: string[] }>;
+  groupId?: string;
 }
 
 export interface ShelfItem {
