@@ -5645,12 +5645,15 @@ export default function App() {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleCancelRun}>Cancel Run</button>
-                  <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleCheckoutRun}>
-                    Complete Checkout
-                  </button>
-                </div>
+                {/* Only the runner can cancel or checkout their own run */}
+                {activeRun.shopperId?.toString() === currentUserProfile?.id?.toString() && (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                    <button className="btn-secondary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleCancelRun}>Cancel Run</button>
+                    <button className="btn-primary" style={{ flex: 1, padding: '9px', borderRadius: '4px' }} onClick={handleCheckoutRun}>
+                      Complete Checkout
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
