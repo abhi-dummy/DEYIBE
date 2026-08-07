@@ -32,13 +32,12 @@ app.post('/api/ocr', async (req, res) => {
       return res.status(500).json({ error: 'Claude API key is not configured on the backend server.' });
     }
 
-    // Active 2026 models fallback chain
+    // Valid Claude model IDs — ordered fastest/cheapest first for OCR
     const models = [
-      'claude-sonnet-4-6',
-      'claude-sonnet-4-5-20250929',
-      'claude-haiku-4-5-20251001',
-      'claude-opus-4-6',
-      'claude-opus-4-7'
+      'claude-haiku-4-5',
+      'claude-sonnet-4-5',
+      'claude-sonnet-5',
+      'claude-opus-5'
     ];
 
     let response;

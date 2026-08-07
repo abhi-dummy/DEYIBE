@@ -2535,7 +2535,7 @@ export default function App() {
       }, 250);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
 
       const response = await fetch('/api/ocr', {
         method: 'POST',
@@ -2598,7 +2598,7 @@ export default function App() {
     } catch (err: any) {
       console.error(err);
       if (err.name === 'AbortError') {
-        alert('Receipt scan failed: The request timed out (took more than 20 seconds). Please try uploading a smaller image or check your internet connection.');
+        alert('Receipt scan failed: The request timed out (took more than 60 seconds). Please try uploading a smaller image or check your internet connection.');
       } else {
         alert(`Receipt scan failed: ${err.message || err}`);
       }
