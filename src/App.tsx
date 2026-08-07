@@ -1244,10 +1244,11 @@ export default function App() {
       if (error) throw error;
 
       if (newKompa) {
-        await supabase.from('kompa_members').insert({
+        const { error: memberError } = await supabase.from('kompa_members').insert({
           kompa_id: newKompa.id,
           profile_id: currentUserProfile.id
         });
+        if (memberError) throw memberError;
 
         const newK: Kompa = {
           id: newKompa.id,
@@ -1313,10 +1314,11 @@ export default function App() {
         return;
       }
 
-      await supabase.from('kompa_members').insert({
+      const { error: memberError } = await supabase.from('kompa_members').insert({
         kompa_id: kompa.id,
         profile_id: currentUserProfile.id
       });
+      if (memberError) throw memberError;
 
       const newK: Kompa = {
         id: kompa.id,
@@ -2361,6 +2363,9 @@ export default function App() {
         });
       }, 250);
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
       const response = await fetch('/api/ocr', {
         method: 'POST',
         headers: {
@@ -2369,8 +2374,10 @@ export default function App() {
         body: JSON.stringify({
           imageBase64: base64Image,
           mediaType: file.type || 'image/jpeg'
-        })
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
       const rawText = await response.text();
       if (!rawText) {
@@ -2419,7 +2426,11 @@ export default function App() {
       });
     } catch (err: any) {
       console.error(err);
-      alert(`Receipt scan failed: ${err.message || err}`);
+      if (err.name === 'AbortError') {
+        alert('Receipt scan failed: The request timed out (took more than 20 seconds). Please try uploading a smaller image or check your internet connection.');
+      } else {
+        alert(`Receipt scan failed: ${err.message || err}`);
+      }
     } finally {
       if (progressInterval) clearInterval(progressInterval);
       setOcrScanning(false);
